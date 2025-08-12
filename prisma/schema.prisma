@@ -1,0 +1,324 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model abonos {
+  idabono       Int       @id @default(autoincrement())
+  idpedido      Int?
+  metodopago    String?   @db.VarChar(10)
+  idimagen      Int?
+  cantidadpagar Decimal?  @db.Decimal(10, 2)
+  imagenes      imagenes? @relation(fields: [idimagen], references: [idimagen], onDelete: NoAction, onUpdate: NoAction)
+  pedido        pedido?   @relation(fields: [idpedido], references: [idpedido], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model catalogoadiciones {
+  idadiciones      Int                @id @default(autoincrement())
+  idinsumos        Int?
+  nombre           String?            @db.VarChar(20)
+  precioadicion    Decimal?           @db.Decimal(10, 2)
+  estado           Boolean?
+  insumos          insumos?           @relation(fields: [idinsumos], references: [idinsumo], onDelete: NoAction, onUpdate: NoAction)
+  detalleadiciones detalleadiciones[]
+}
+
+model catalogorelleno {
+  idrelleno        Int                @id @default(autoincrement())
+  nombre           String?            @db.VarChar(20)
+  precioadicion    Decimal?           @db.Decimal(10, 2)
+  idinsumos        Int?
+  estado           Boolean?
+  insumos          insumos?           @relation(fields: [idinsumos], references: [idinsumo], onDelete: NoAction, onUpdate: NoAction)
+  detalleadiciones detalleadiciones[]
+}
+
+model catalogosabor {
+  idsabor          Int                @id @default(autoincrement())
+  nombre           String?            @db.VarChar(20)
+  precioadicion    Decimal?           @db.Decimal(10, 2)
+  idinsumos        Int?
+  estado           Boolean?
+  insumos          insumos?           @relation(fields: [idinsumos], references: [idinsumo], onDelete: NoAction, onUpdate: NoAction)
+  detalleadiciones detalleadiciones[]
+}
+
+model categoriainsumos {
+  idcategoriainsumos Int       @id @default(autoincrement())
+  nombrecategoria    String?   @db.VarChar(20)
+  descripcion        String?   @db.VarChar(50)
+  estado             Boolean?
+  insumos            insumos[]
+}
+
+model categoriaproducto {
+  idcategoriaproducto Int               @id @default(autoincrement())
+  nombrecategoria     String?           @db.VarChar(20)
+  descripcion         String?           @db.VarChar(50)
+  estado              Boolean?
+  productogeneral     productogeneral[]
+}
+
+model cliente {
+  idcliente                    Int       @id @default(autoincrement())
+  tipodocumento                String?   @db.VarChar(20)
+  numerodocumento              String?   @db.VarChar(20)
+  nombre                       String?   @db.VarChar(10)
+  apellido                     String?   @db.VarChar(10)
+  correo                       String?   @db.VarChar(50)
+  hashcontrasena               String?   @db.VarChar(20)
+  direccion                    String?   @db.VarChar(30)
+  barrio                       String?   @db.VarChar(20)
+  ciudad                       String?   @db.VarChar(20)
+  fechanacimiento              DateTime? @db.Date
+  celular                      String?   @db.VarChar(20)
+  estado                       Boolean?
+  venta_venta_clienteTocliente venta[]   @relation("venta_clienteTocliente")
+}
+
+model compra {
+  idcompra      Int             @id @default(autoincrement())
+  idproveedor   Int?
+  fecharegistro DateTime?       @db.Date
+  fechacompra   DateTime?       @db.Date
+  subtotal      Decimal?        @db.Decimal(10, 2)
+  iva           Decimal?        @db.Decimal(10, 2)
+  total         Decimal?        @db.Decimal(10, 2)
+  proveedor     proveedor?      @relation(fields: [idproveedor], references: [idproveedor], onDelete: NoAction, onUpdate: NoAction)
+  detallecompra detallecompra[]
+}
+
+model detalleadiciones {
+  idadicion          Int                @id @default(autoincrement())
+  iddetalleventa     Int?
+  idadiciones        Int?
+  cantidadadicionada Decimal?           @db.Decimal(10, 2)
+  preciounitario     Decimal?           @db.Decimal(10, 2)
+  total              Decimal?           @db.Decimal(10, 2)
+  idsabor            Int?
+  idrelleno          Int?
+  catalogoadiciones  catalogoadiciones? @relation(fields: [idadiciones], references: [idadiciones], onDelete: NoAction, onUpdate: NoAction)
+  detalleventa       detalleventa?      @relation(fields: [iddetalleventa], references: [iddetalleventa], onDelete: NoAction, onUpdate: NoAction)
+  catalogorelleno    catalogorelleno?   @relation(fields: [idrelleno], references: [idrelleno], onDelete: NoAction, onUpdate: NoAction)
+  catalogosabor      catalogosabor?     @relation(fields: [idsabor], references: [idsabor], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model detallecompra {
+  iddetallecompra  Int      @id @default(autoincrement())
+  idcompra         Int?
+  idinsumos        Int?
+  cantidad         Decimal? @db.Decimal(10, 2)
+  preciounitario   Decimal? @db.Decimal(10, 2)
+  subtotalproducto Decimal? @db.Decimal(10, 2)
+  compra           compra?  @relation(fields: [idcompra], references: [idcompra], onDelete: NoAction, onUpdate: NoAction)
+  insumos          insumos? @relation(fields: [idinsumos], references: [idinsumo], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model detalleproduccion {
+  iddetalleproduccion Int              @id @default(autoincrement())
+  idproductogeneral   Int?
+  idproduccion        Int?
+  cantidadproducto    Decimal?         @db.Decimal(10, 2)
+  produccion          produccion?      @relation(fields: [idproduccion], references: [idproduccion], onDelete: NoAction, onUpdate: NoAction)
+  productogeneral     productogeneral? @relation(fields: [idproductogeneral], references: [idproductogeneral], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model detallereceta {
+  iddetallereceta Int           @id @default(autoincrement())
+  idreceta        Int?
+  idinsumo        Int?
+  idunidadmedida  Int?
+  cantidad        Decimal?      @db.Decimal(10, 2)
+  insumos         insumos?      @relation(fields: [idinsumo], references: [idinsumo], onDelete: NoAction, onUpdate: NoAction)
+  receta          receta?       @relation(fields: [idreceta], references: [idreceta], onDelete: NoAction, onUpdate: NoAction)
+  unidadmedida    unidadmedida? @relation(fields: [idunidadmedida], references: [idunidadmedida], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model detalleventa {
+  iddetalleventa    Int                @id @default(autoincrement())
+  idventa           Int?
+  idproductogeneral Int?
+  cantidad          Int?
+  preciounitario    Decimal?           @db.Decimal(10, 2)
+  subtotal          Decimal?           @db.Decimal(15, 2)
+  iva               Decimal?           @db.Decimal(10, 2)
+  detalleadiciones  detalleadiciones[]
+  productogeneral   productogeneral?   @relation(fields: [idproductogeneral], references: [idproductogeneral], onDelete: NoAction, onUpdate: NoAction)
+  venta             venta?             @relation(fields: [idventa], references: [idventa], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model estadoproduccion {
+  idestado          Int                 @id @default(autoincrement())
+  nombreestado      String?             @db.VarChar(20)
+  produccion_estado produccion_estado[]
+}
+
+model imagenes {
+  idimagen        Int               @id @default(autoincrement())
+  urlimg          String?           @db.VarChar(100)
+  abonos          abonos[]
+  insumos         insumos[]
+  productogeneral productogeneral[]
+}
+
+model insumos {
+  idinsumo           Int                 @id @default(autoincrement())
+  nombreinsumo       String?             @db.VarChar(20)
+  idcategoriainsumos Int?
+  idunidadmedida     Int?
+  fecharegistro      DateTime?           @db.Date
+  idimagen           Int?
+  estado             Boolean?
+  cantidad           Decimal?            @db.Decimal(10, 2)
+  catalogoadiciones  catalogoadiciones[]
+  catalogorelleno    catalogorelleno[]
+  catalogosabor      catalogosabor[]
+  detallecompra      detallecompra[]
+  detallereceta      detallereceta[]
+  categoriainsumos   categoriainsumos?   @relation(fields: [idcategoriainsumos], references: [idcategoriainsumos], onDelete: NoAction, onUpdate: NoAction)
+  imagenes           imagenes?           @relation(fields: [idimagen], references: [idimagen], onDelete: NoAction, onUpdate: NoAction)
+  unidadmedida       unidadmedida?       @relation(fields: [idunidadmedida], references: [idunidadmedida], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model pedido {
+  idpedido             Int       @id @default(autoincrement())
+  idventa              Int?
+  observaciones        String?   @db.VarChar(100)
+  fechaentrega         DateTime? @db.Date
+  mensajepersonalizado String?   @db.VarChar(100)
+  abonos               abonos[]
+  venta                venta?    @relation(fields: [idventa], references: [idventa], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model permisos {
+  idpermiso   Int          @id @default(autoincrement())
+  modulo      String?      @db.VarChar(15)
+  descripcion String?      @db.VarChar(30)
+  estado      Boolean?
+  rolpermiso  rolpermiso[]
+}
+
+model produccion {
+  idproduccion      Int                 @id @default(autoincrement())
+  fechapedido       DateTime?           @db.Date
+  fechaentrega      DateTime?           @db.Date
+  numeropedido      String?             @db.VarChar(20)
+  estadoproduccion  Int?
+  detalleproduccion detalleproduccion[]
+  produccion_estado produccion_estado[]
+}
+
+model produccion_estado {
+  idproduccion     Int
+  idestado         Int
+  estadoproduccion estadoproduccion @relation(fields: [idestado], references: [idestado], onDelete: NoAction, onUpdate: NoAction)
+  produccion       produccion       @relation(fields: [idproduccion], references: [idproduccion], onDelete: NoAction, onUpdate: NoAction)
+
+  @@id([idproduccion, idestado])
+}
+
+model productogeneral {
+  idproductogeneral   Int                 @id @default(autoincrement())
+  nombreproducto      String?             @db.VarChar(20)
+  precioproducto      Decimal?            @db.Decimal(10, 2)
+  cantidadproducto    Decimal?            @db.Decimal(10, 2)
+  estado              Boolean?
+  idcategoriaproducto Int?
+  idimagen            Int?
+  idreceta            Int?
+  detalleproduccion   detalleproduccion[]
+  detalleventa        detalleventa[]
+  categoriaproducto   categoriaproducto?  @relation(fields: [idcategoriaproducto], references: [idcategoriaproducto], onDelete: NoAction, onUpdate: NoAction)
+  imagenes            imagenes?           @relation(fields: [idimagen], references: [idimagen], onDelete: NoAction, onUpdate: NoAction)
+  receta              receta?             @relation(fields: [idreceta], references: [idreceta], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model proveedor {
+  idproveedor     Int      @id @default(autoincrement())
+  tipodocumento   String?  @db.VarChar(50)
+  documento       Int?
+  nombreempresa   String?  @db.VarChar(50)
+  nombreproveedor String?  @db.VarChar(50)
+  contacto        Int?
+  correo          String?  @db.VarChar(50)
+  direccion       String?  @db.VarChar(30)
+  estado          Boolean?
+  compra          compra[]
+}
+
+model receta {
+  idreceta         Int               @id @default(autoincrement())
+  nombrereceta     String?           @db.VarChar(50)
+  especificaciones String?           @db.VarChar(80)
+  detallereceta    detallereceta[]
+  productogeneral  productogeneral[]
+}
+
+model rol {
+  idrol       Int          @id @default(autoincrement())
+  rol         String?      @db.VarChar(20)
+  descripcion String?      @db.VarChar(30)
+  estado      Boolean?
+  rolpermiso  rolpermiso[]
+  usuarios    usuarios[]
+}
+
+model rolpermiso {
+  idrolpermiso Int       @id @default(autoincrement())
+  idrol        Int?
+  idpermiso    Int?
+  estado       Boolean?
+  permisos     permisos? @relation(fields: [idpermiso], references: [idpermiso], onDelete: NoAction, onUpdate: NoAction)
+  rol          rol?      @relation(fields: [idrol], references: [idrol], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model sede {
+  idsede    Int      @id @default(autoincrement())
+  nombre    String?  @db.VarChar(20)
+  telefono  String?  @db.VarChar(20)
+  direccion String?  @db.VarChar(20)
+  estado    Boolean?
+  venta     venta[]
+}
+
+model unidadmedida {
+  idunidadmedida Int             @id @default(autoincrement())
+  unidadmedida   String?         @db.VarChar(20)
+  formademedir   String?         @db.VarChar(30)
+  equivalente    Int?
+  detallereceta  detallereceta[]
+  insumos        insumos[]
+}
+
+model usuarios {
+  idusuario      Int      @id @default(autoincrement())
+  tipodocumento  String?  @db.VarChar(10)
+  documento      Int?
+  nombre         String?  @db.VarChar(20)
+  apellido       String?  @db.VarChar(20)
+  correo         String?  @db.VarChar(50)
+  hashcontrasena String?  @db.VarChar(15)
+  idrol          Int?
+  estado         Boolean?
+  rol            rol?     @relation(fields: [idrol], references: [idrol], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model venta {
+  idventa                        Int            @id @default(autoincrement())
+  fechaventa                     DateTime?      @db.Date
+  cliente                        Int?
+  idsede                         Int?
+  metodopago                     String?        @db.VarChar(10)
+  tipoventa                      String?        @db.VarChar(10)
+  estadoventa                    Boolean?
+  total                          Decimal?       @db.Decimal(10, 2)
+  detalleventa                   detalleventa[]
+  pedido                         pedido[]
+  cliente_venta_clienteTocliente cliente?       @relation("venta_clienteTocliente", fields: [cliente], references: [idcliente], onDelete: NoAction, onUpdate: NoAction)
+  sede                           sede?          @relation(fields: [idsede], references: [idsede], onDelete: NoAction, onUpdate: NoAction)
+}
