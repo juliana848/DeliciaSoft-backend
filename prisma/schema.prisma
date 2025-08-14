@@ -199,8 +199,10 @@ model permisos {
   idpermiso   Int          @id @default(autoincrement())
   modulo      String?      @db.VarChar(15)
   descripcion String?      @db.VarChar(30)
-  estado      Boolean?
+  estado      Boolean?     @default(true)
   rolpermiso  rolpermiso[]
+
+  @@map("permisos")
 }
 
 model produccion {
@@ -263,18 +265,27 @@ model rol {
   idrol       Int          @id @default(autoincrement())
   rol         String?      @db.VarChar(20)
   descripcion String?      @db.VarChar(30)
-  estado      Boolean?
+  estado      Boolean?     @default(true)
   rolpermiso  rolpermiso[]
   usuarios    usuarios[]
+
+  @@index([rol]) 
+  @@map("rol")
 }
 
 model rolpermiso {
   idrolpermiso Int       @id @default(autoincrement())
   idrol        Int?
   idpermiso    Int?
-  estado       Boolean?
+  estado       Boolean?  @default(true)
+
   permisos     permisos? @relation(fields: [idpermiso], references: [idpermiso], onDelete: NoAction, onUpdate: NoAction)
   rol          rol?      @relation(fields: [idrol], references: [idrol], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([idrol, idpermiso], name: "idrol_idpermiso") 
+  @@index([idrol])
+  @@index([idpermiso])
+  @@map("rolpermiso")
 }
 
 model sede {
@@ -304,9 +315,14 @@ model usuarios {
   correo         String?  @db.VarChar(50)
   hashcontrasena String?  @db.VarChar(15)
   idrol          Int?
-  estado         Boolean?
+  estado         Boolean? @default(true)
+
   rol            rol?     @relation(fields: [idrol], references: [idrol], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([idrol])
+  @@map("usuarios")
 }
+
 
 model venta {
   idventa                        Int            @id @default(autoincrement())
