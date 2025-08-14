@@ -6,42 +6,42 @@ const prisma = new PrismaClient();
    📌 Roles
 =========================================================== */
 
-// GET /api/roles - Obtener todos los roles con permisos
+// Obtener todos los roles con permisos activos
 exports.getAll = async (req, res) => {
   try {
     const roles = await prisma.rol.findMany({
       include: {
         rolpermiso: {
-          include: { permisos: true },
-          where: { estado: true }
+          where: { estado: true },
+          select: { idpermiso: true }
         }
       }
     });
 
-    const rolesTransformados = roles.map(rol => ({
-      idrol: rol.idrol,
-      rol: rol.rol,
-      descripcion: rol.descripcion,
-      estado: rol.estado,
-      permisos: rol.rolpermiso.map(rp => rp.idpermiso)
-    }));
-
-    res.json(rolesTransformados);
+    res.json(
+      roles.map(rol => ({
+        idrol: rol.idrol,
+        rol: rol.rol,
+        descripcion: rol.descripcion,
+        estado: rol.estado,
+        permisos: rol.rolpermiso.map(rp => rp.idpermiso)
+      }))
+    );
   } catch (error) {
     res.status(500).json({ message: 'Error al obtener roles', error: error.message });
   }
 };
 
-// GET /api/roles/:id - Obtener rol específico con permisos
+// Obtener un rol específico
 exports.getById = async (req, res) => {
   try {
-    const id = parseInt(req.params.id);
+    const idrol = parseInt(req.params.id);
     const rol = await prisma.rol.findUnique({
-      where: { idrol: id },
+      where: { idrol },
       include: {
         rolpermiso: {
-          include: { permisos: true },
-          where: { estado: true }
+          where: { estado: true },
+          select: { idpermiso: true }
         }
       }
     });
@@ -60,77 +60,63 @@ exports.getById = async (req, res) => {
   }
 };
 
-// POST /api/roles - Crear rol con permisos
+// Crear rol con permisos
 exports.create = async (req, res) => {
+  const { rol, descripcion, estado, permisos } = req.body;
+
+  if (!rol || !Array.isArray(permisos) || permisos.length === 0) {
+    return res.status(400).json({ message: "Faltan datos obligatorios" });
+  }
+
   try {
-    const { rol, descripcion, estado = true, permisos = [] } = req.body;
+    const nuevoRol = await prisma.$transaction(async tx => {
+      const rolCreado = await tx.rol.create({
+        data: { rol: rol.trim(), descripcion: descripcion?.trim(), estado }
+      });
 
-    if (!rol?.trim()) return res.status(400).json({ message: 'El nombre del rol es obligatorio' });
-    if (!descripcion?.trim()) return res.status(400).json({ message: 'La descripción es obligatoria' });
-
-    if (rol.length > 20) return res.status(400).json({ message: 'El nombre no puede tener más de 20 caracteres' });
-    if (descripcion.length > 30) return res.status(400).json({ message: 'La descripción no puede tener más de 30 caracteres' });
-
-    const rolExistente = await prisma.rol.findFirst({ where: { rol: rol.trim() } });
-    if (rolExistente) return res.status(400).json({ message: 'Ya existe un rol con este nombre' });
-
-    const nuevoRol = await prisma.rol.create({
-      data: { rol: rol.trim(), descripcion: descripcion.trim(), estado }
-    });
-
-    if (permisos.length > 0) {
-      await prisma.rolpermiso.createMany({
-        data: permisos.map(idPermiso => ({
-          idrol: nuevoRol.idrol,
-          idpermiso: idPermiso,
+      await tx.rolpermiso.createMany({
+        data: permisos.map(idpermiso => ({
+          idrol: rolCreado.idrol,
+          idpermiso,
           estado: true
         }))
       });
-    }
 
-    res.status(201).json(nuevoRol);
+      return rolCreado;
+    });
+
+    res.status(201).json({ message: 'Rol creado correctamente', idrol: nuevoRol.idrol });
   } catch (error) {
     res.status(500).json({ message: 'Error al crear rol', error: error.message });
   }
 };
 
-// PUT /api/roles/:id - Actualizar rol y permisos
+// Actualizar rol y sus permisos
 exports.update = async (req, res) => {
-  try {
-    const id = parseInt(req.params.id);
-    const { rol, descripcion, estado, permisos } = req.body;
+  const idrol = parseInt(req.params.id);
+  const { rol, descripcion, estado, permisos } = req.body;
 
-    const rolExiste = await prisma.rol.findUnique({ where: { idrol: id } });
+  try {
+    const rolExiste = await prisma.rol.findUnique({ where: { idrol } });
     if (!rolExiste) return res.status(404).json({ message: 'Rol no encontrado' });
 
-    if (rol && rol.length > 20) return res.status(400).json({ message: 'El nombre no puede tener más de 20 caracteres' });
-    if (descripcion && descripcion.length > 30) return res.status(400).json({ message: 'La descripción no puede tener más de 30 caracteres' });
-
-    if (rol && rol.trim() !== rolExiste.rol) {
-      const otro = await prisma.rol.findFirst({ where: { rol: rol.trim(), idrol: { not: id } } });
-      if (otro) return res.status(400).json({ message: 'Ya existe un rol con este nombre' });
-    }
-
     await prisma.rol.update({
-      where: { idrol: id },
+      where: { idrol },
       data: {
         rol: rol?.trim() ?? undefined,
         descripcion: descripcion?.trim() ?? undefined,
-        estado: estado ?? undefined
+        estado
       }
     });
 
     if (Array.isArray(permisos)) {
-      await prisma.rolpermiso.updateMany({
-        where: { idrol: id },
-        data: { estado: false }
-      });
+      await prisma.rolpermiso.updateMany({ where: { idrol }, data: { estado: false } });
 
-      for (const idPermiso of permisos) {
+      for (const idpermiso of permisos) {
         await prisma.rolpermiso.upsert({
-          where: { idrol_idpermiso: { idrol: id, idpermiso: idPermiso } },
+          where: { idrol_idpermiso: { idrol, idpermiso } },
           update: { estado: true },
-          create: { idrol: id, idpermiso: idPermiso, estado: true }
+          create: { idrol, idpermiso, estado: true }
         });
       }
     }
@@ -141,14 +127,14 @@ exports.update = async (req, res) => {
   }
 };
 
-// PATCH /api/roles/:id/estado - Cambiar solo estado
+// Cambiar solo estado del rol
 exports.changeState = async (req, res) => {
-  try {
-    const id = parseInt(req.params.id);
-    const { estado } = req.body;
+  const idrol = parseInt(req.params.id);
+  const { estado } = req.body;
 
+  try {
     const rol = await prisma.rol.update({
-      where: { idrol: id },
+      where: { idrol },
       data: { estado }
     });
 
@@ -158,18 +144,18 @@ exports.changeState = async (req, res) => {
   }
 };
 
-// DELETE /api/roles/:id - Eliminar rol (solo si no tiene usuarios)
+// Eliminar rol si no tiene usuarios
 exports.remove = async (req, res) => {
-  try {
-    const id = parseInt(req.params.id);
+  const idrol = parseInt(req.params.id);
 
-    const usuariosAsociados = await prisma.usuarios.count({ where: { idrol: id } });
-    if (usuariosAsociados > 0) {
+  try {
+    const usuarios = await prisma.usuarios.count({ where: { idrol } });
+    if (usuarios > 0) {
       return res.status(400).json({ message: 'No se puede eliminar el rol porque tiene usuarios asociados' });
     }
 
-    await prisma.rolpermiso.deleteMany({ where: { idrol: id } });
-    await prisma.rol.delete({ where: { idrol: id } });
+    await prisma.rolpermiso.deleteMany({ where: { idrol } });
+    await prisma.rol.delete({ where: { idrol } });
 
     res.json({ message: 'Rol eliminado correctamente' });
   } catch (error) {
@@ -181,7 +167,7 @@ exports.remove = async (req, res) => {
    📌 Permisos
 =========================================================== */
 
-// GET /api/permisos
+// Obtener todos los permisos activos
 exports.getPermisos = async (req, res) => {
   try {
     const permisos = await prisma.permisos.findMany({ where: { estado: true } });
@@ -191,36 +177,39 @@ exports.getPermisos = async (req, res) => {
   }
 };
 
-// GET /api/roles/:id/permisos
+// Obtener permisos de un rol
 exports.getPermisosByRol = async (req, res) => {
+  const idrol = parseInt(req.params.id);
   try {
-    const id = parseInt(req.params.id);
-
     const permisos = await prisma.rolpermiso.findMany({
-      where: { idrol: id, estado: true },
+      where: { idrol, estado: true },
       include: { permisos: true }
     });
 
-    res.json(permisos.map(p => ({
-      idpermiso: p.permisos.idpermiso,
-      modulo: p.permisos.modulo,
-      descripcion: p.permisos.descripcion
-    })));
+    res.json(
+      permisos.map(p => ({
+        idpermiso: p.permisos.idpermiso,
+        modulo: p.permisos.modulo,
+        descripcion: p.permisos.descripcion
+      }))
+    );
   } catch (error) {
     res.status(500).json({ message: 'Error al obtener permisos', error: error.message });
   }
 };
 
-// POST /api/roles/:id/permisos
+// Agregar permisos a un rol
 exports.addPermisosToRol = async (req, res) => {
+  const idrol = parseInt(req.params.id);
+  const { permisos } = req.body;
+
+  if (!Array.isArray(permisos)) {
+    return res.status(400).json({ message: 'Los permisos deben ser un array' });
+  }
+
   try {
-    const id = parseInt(req.params.id);
-    const { permisos } = req.body;
-
-    if (!Array.isArray(permisos)) return res.status(400).json({ message: 'Los permisos deben ser un array' });
-
     await prisma.rolpermiso.createMany({
-      data: permisos.map(idPermiso => ({ idrol: id, idpermiso: idPermiso, estado: true })),
+      data: permisos.map(idpermiso => ({ idrol, idpermiso, estado: true })),
       skipDuplicates: true
     });
 
@@ -230,19 +219,19 @@ exports.addPermisosToRol = async (req, res) => {
   }
 };
 
-// PUT /api/roles/:id/permisos
+// Actualizar permisos de un rol
 exports.updatePermisosRol = async (req, res) => {
+  const idrol = parseInt(req.params.id);
+  const { permisos } = req.body;
+
   try {
-    const id = parseInt(req.params.id);
-    const { permisos } = req.body;
+    await prisma.rolpermiso.updateMany({ where: { idrol }, data: { estado: false } });
 
-    await prisma.rolpermiso.updateMany({ where: { idrol: id }, data: { estado: false } });
-
-    for (const idPermiso of permisos) {
+    for (const idpermiso of permisos) {
       await prisma.rolpermiso.upsert({
-        where: { idrol_idpermiso: { idrol: id, idpermiso: idPermiso } },
+        where: { idrol_idpermiso: { idrol, idpermiso } },
         update: { estado: true },
-        create: { idrol: id, idpermiso: idPermiso, estado: true }
+        create: { idrol, idpermiso, estado: true }
       });
     }
 
