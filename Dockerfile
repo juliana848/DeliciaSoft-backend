@@ -17,4 +17,5 @@ COPY . .
 EXPOSE 4000
 
 # Comando para iniciar la API
-CMD ["node", "server.js"]
+CMD ["node", "src/server.js"]
+
