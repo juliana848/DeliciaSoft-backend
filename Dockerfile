@@ -8,7 +8,7 @@ WORKDIR /app
 COPY package*.json ./
 
 # Instalar dependencias (solo producción para más rapidez)
-RUN npm install --only=production
+RUN npm install
 
 # Copiar el resto del código
 COPY . .
@@ -18,4 +18,3 @@ EXPOSE 4000
 
 # Comando para iniciar la API
 CMD ["node", "src/server.js"]
-
