@@ -16,7 +16,7 @@ exports.getById = async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const proveedor = await prisma.proveedor.findUnique({
-      where: { IdProveedor: id }   // 👈 Usa IdProveedor (no idproveedor)
+      where: { IdProveedor: id }   
     });
     if (!proveedor) return res.status(404).json({ message: 'Proveedor no encontrado' });
     res.json(proveedor);
@@ -54,7 +54,7 @@ exports.create = async (req, res) => {
 
     res.status(201).json(nuevoProveedor);
   } catch (error) {
-    console.error("Error en create proveedor:", error); // 👈 log real
+    console.error("Error en create proveedor:", error);
     res.status(500).json({ message: 'Error al crear proveedor', error: error.message });
   }
 };
