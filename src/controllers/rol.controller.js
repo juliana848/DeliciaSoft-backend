@@ -3,7 +3,7 @@ const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
 /* ===========================================================
-   📌 Roles
+   🔌 Roles
 =========================================================== */
 
 // Obtener todos los roles con permisos activos
@@ -62,7 +62,7 @@ exports.getById = async (req, res) => {
   }
 };
 
-// Crear rol con permisos - CORREGIDO
+// Crear rol con permisos
 exports.create = async (req, res) => {
   const { rol, descripcion, estado = true, permisos = [] } = req.body;
 
@@ -149,7 +149,7 @@ exports.create = async (req, res) => {
   }
 };
 
-// Actualizar rol y sus permisos - CORREGIDO
+// Actualizar rol y sus permisos
 exports.update = async (req, res) => {
   const idrol = parseInt(req.params.id);
   const { rol, descripcion, estado, permisos } = req.body;
@@ -250,10 +250,12 @@ exports.update = async (req, res) => {
   }
 };
 
-// Cambiar solo estado del rol
+// Cambiar solo estado del rol - MEJORADO
 exports.changeState = async (req, res) => {
   const idrol = parseInt(req.params.id);
   const { estado } = req.body;
+
+  console.log(`Cambiando estado del rol ${idrol} a ${estado}`);
 
   if (isNaN(idrol)) {
     return res.status(400).json({ message: 'ID de rol inválido' });
@@ -264,14 +266,28 @@ exports.changeState = async (req, res) => {
   }
 
   try {
+    // Verificar que el rol existe
+    const rolExiste = await prisma.rol.findUnique({ where: { idrol } });
+    if (!rolExiste) {
+      return res.status(404).json({ message: 'Rol no encontrado' });
+    }
+
+    // Actualizar solo el estado
     const rol = await prisma.rol.update({
       where: { idrol },
       data: { estado }
     });
 
+    console.log('Estado actualizado correctamente:', rol);
+
     res.json({
       message: `Rol ${estado ? 'activado' : 'desactivado'} correctamente`,
-      rol
+      rol: {
+        idrol: rol.idrol,
+        rol: rol.rol,
+        descripcion: rol.descripcion,
+        estado: rol.estado
+      }
     });
   } catch (error) {
     console.error('Error al cambiar estado:', error);
@@ -324,7 +340,7 @@ exports.remove = async (req, res) => {
 };
 
 /* ===========================================================
-   📌 Permisos
+   🔌 Permisos
 =========================================================== */
 
 // Obtener todos los permisos activos
@@ -344,7 +360,7 @@ exports.getPermisos = async (req, res) => {
   }
 };
 
-// Obtener permisos de un rol - CORREGIDO
+// Obtener permisos de un rol
 exports.getPermisosByRol = async (req, res) => {
   const idrol = parseInt(req.params.id);
   
