@@ -16,7 +16,7 @@ exports.getById = async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const proveedor = await prisma.proveedor.findUnique({
-      where: { IdProveedor: id }   
+      where: { idproveedor: id } // Usar 'idproveedor' del schema de Prisma
     });
     if (!proveedor) return res.status(404).json({ message: 'Proveedor no encontrado' });
     res.json(proveedor);
@@ -41,10 +41,10 @@ exports.create = async (req, res) => {
 
     const nuevoProveedor = await prisma.proveedor.create({
       data: {
-        tipoDocumento,
+        tipodocumento, // Usar 'tipodocumento' del schema de Prisma
         documento: documento ? parseInt(documento) : null,
-        nombreEmpresa,
-        nombreProveedor,
+        nombreempresa, // Usar 'nombreempresa' del schema de Prisma
+        nombreproveedor, // Usar 'nombreproveedor' del schema de Prisma
         contacto: contacto ? parseInt(contacto) : null,
         correo,
         direccion,
@@ -64,30 +64,31 @@ exports.update = async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const {
-      TipoDocumento,
-      Documento,
-      NombreEmpresa,
-      NombreProveedor,
-      Contacto,
-      Correo,
-      Direccion,
-      Estado
+      tipodocumento, // Corregido: Usar 'tipodocumento' de req.body
+      documento,     // Corregido: Usar 'documento' de req.body
+      nombreempresa, // Corregido: Usar 'nombreempresa' de req.body
+      nombreproveedor, // Corregido: Usar 'nombreproveedor' de req.body
+      contacto,      // Corregido: Usar 'contacto' de req.body
+      correo,
+      direccion,
+      estado
     } = req.body;
 
-    const proveedorExiste = await prisma.proveedor.findUnique({ where: { IdProveedor: id } });
+    // Se busca por 'idproveedor', que es el nombre correcto en el schema
+    const proveedorExiste = await prisma.proveedor.findUnique({ where: { idproveedor: id } });
     if (!proveedorExiste) return res.status(404).json({ message: 'Proveedor no encontrado' });
 
     const actualizado = await prisma.proveedor.update({
-      where: { IdProveedor: id },
+      where: { idproveedor: id },
       data: {
-        TipoDocumento,
-        Documento: Documento ? parseInt(Documento) : null,
-        NombreEmpresa,
-        NombreProveedor,
-        Contacto: Contacto ? parseInt(Contacto) : null,
-        Correo,
-        Direccion,
-        Estado
+        tipodocumento,
+        documento: documento ? parseInt(documento) : null,
+        nombreempresa,
+        nombreproveedor,
+        contacto: contacto ? parseInt(contacto) : null,
+        correo,
+        direccion,
+        estado
       }
     });
 
@@ -101,10 +102,12 @@ exports.update = async (req, res) => {
 exports.remove = async (req, res) => {
   try {
     const id = parseInt(req.params.id);
-    const proveedorExiste = await prisma.proveedor.findUnique({ where: { IdProveedor: id } });
+    // Se busca por 'idproveedor', que es el nombre correcto en el schema
+    const proveedorExiste = await prisma.proveedor.findUnique({ where: { idproveedor: id } });
     if (!proveedorExiste) return res.status(404).json({ message: 'Proveedor no encontrado' });
 
-    await prisma.proveedor.delete({ where: { IdProveedor: id } });
+    // Se elimina usando 'idproveedor'
+    await prisma.proveedor.delete({ where: { idproveedor: id } });
     res.json({ message: 'Proveedor eliminado correctamente' });
   } catch (error) {
     res.status(500).json({ message: 'Error al eliminar proveedor', error: error.message });
