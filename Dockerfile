@@ -4,16 +4,19 @@ FROM node:18
 # Carpeta de trabajo
 WORKDIR /app
 
-# Copiar package.json y package-lock.json primero (para aprovechar la caché de Docker)
+# Copiar package.json y package-lock.json primero
 COPY package*.json ./
 
-# Instalar dependencias 
-RUN npm install 
+# Instalar dependencias
+RUN npm install
 
-# Copiar el resto del código
+# Copiar el resto del código (incluyendo prisma/schema.prisma)
 COPY . .
 
-# Exponer el puerto 
+# Generar Prisma Client después de copiar todo
+RUN npx prisma generate
+
+# Exponer el puerto
 EXPOSE 4000
 
 # Comando para iniciar la API

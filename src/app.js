@@ -106,4 +106,15 @@ app.use('/api/usuarios', usuariosRoutes);
 const ventaRoutes = require('./routes/venta.routes');
 app.use('/api/venta', ventaRoutes);
 
+// SOLO para pruebas, puedes borrar luego
+app.get('/test-env', (req, res) => {
+  res.json({
+    DATABASE_URL: process.env.DATABASE_URL ? '✅ OK' : '❌ MISSING',
+    JWT_SECRET: process.env.JWT_SECRET ? '✅ OK' : '❌ MISSING',
+    EMAIL_USER: process.env.EMAIL_USER ? '✅ OK' : '❌ MISSING',
+    CLOUDINARY_API_KEY: process.env.CLOUDINARY_API_KEY ? '✅ OK' : '❌ MISSING',
+  });
+});
+
+
 module.exports = app;

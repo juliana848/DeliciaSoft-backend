@@ -3,7 +3,7 @@ const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
 /* ===========================================================
-   📌 Roles
+   🔌 Roles
 =========================================================== */
 
 // Obtener todos los roles con permisos activos
@@ -28,6 +28,7 @@ exports.getAll = async (req, res) => {
       }))
     );
   } catch (error) {
+    console.error('Error al obtener roles:', error);
     res.status(500).json({ message: 'Error al obtener roles', error: error.message });
   }
 };
@@ -56,37 +57,94 @@ exports.getById = async (req, res) => {
       permisos: rol.rolpermiso.map(rp => rp.idpermiso)
     });
   } catch (error) {
+    console.error('Error al obtener rol:', error);
     res.status(500).json({ message: 'Error al obtener rol', error: error.message });
   }
 };
 
 // Crear rol con permisos
 exports.create = async (req, res) => {
-  const { rol, descripcion, estado, permisos } = req.body;
+  const { rol, descripcion, estado = true, permisos = [] } = req.body;
 
-  if (!rol || !Array.isArray(permisos) || permisos.length === 0) {
-    return res.status(400).json({ message: "Faltan datos obligatorios" });
+  // Validaciones
+  if (!rol || !rol.trim()) {
+    return res.status(400).json({ message: "El nombre del rol es obligatorio" });
+  }
+
+  if (!descripcion || !descripcion.trim()) {
+    return res.status(400).json({ message: "La descripción del rol es obligatoria" });
+  }
+
+  if (!Array.isArray(permisos) || permisos.length === 0) {
+    return res.status(400).json({ message: "Debe seleccionar al menos un permiso" });
   }
 
   try {
-    const nuevoRol = await prisma.$transaction(async tx => {
+    // Verificar que no exista un rol con el mismo nombre
+    const rolExistente = await prisma.rol.findFirst({
+      where: { 
+        rol: {
+          equals: rol.trim(),
+          mode: 'insensitive'
+        }
+      }
+    });
+
+    if (rolExistente) {
+      return res.status(400).json({ message: "Ya existe un rol con este nombre" });
+    }
+
+    // Verificar que todos los permisos existan
+    const permisosValidos = await prisma.permisos.findMany({
+      where: { 
+        idpermiso: { in: permisos },
+        estado: true 
+      },
+      select: { idpermiso: true }
+    });
+
+    if (permisosValidos.length !== permisos.length) {
+      return res.status(400).json({ message: "Algunos permisos no son válidos" });
+    }
+
+    // Crear rol con permisos en transacción
+    const resultado = await prisma.$transaction(async (tx) => {
+      // Crear el rol
       const rolCreado = await tx.rol.create({
-        data: { rol: rol.trim(), descripcion: descripcion?.trim(), estado }
+        data: { 
+          rol: rol.trim(), 
+          descripcion: descripcion.trim(), 
+          estado 
+        }
       });
 
-      await tx.rolpermiso.createMany({
-        data: permisos.map(idpermiso => ({
-          idrol: rolCreado.idrol,
-          idpermiso,
-          estado: true
-        }))
-      });
+      // Asignar permisos al rol
+      if (permisos.length > 0) {
+        await tx.rolpermiso.createMany({
+          data: permisos.map(idpermiso => ({
+            idrol: rolCreado.idrol,
+            idpermiso,
+            estado: true
+          }))
+        });
+      }
 
       return rolCreado;
     });
 
-    res.status(201).json({ message: 'Rol creado correctamente', idrol: nuevoRol.idrol });
+    res.status(201).json({ 
+      message: 'Rol creado correctamente', 
+      idrol: resultado.idrol,
+      rol: resultado
+    });
+
   } catch (error) {
+    console.error('Error al crear rol:', error);
+    
+    if (error.code === 'P2002') {
+      return res.status(400).json({ message: 'Ya existe un rol con este nombre' });
+    }
+    
     res.status(500).json({ message: 'Error al crear rol', error: error.message });
   }
 };
@@ -96,50 +154,148 @@ exports.update = async (req, res) => {
   const idrol = parseInt(req.params.id);
   const { rol, descripcion, estado, permisos } = req.body;
 
+  if (isNaN(idrol)) {
+    return res.status(400).json({ message: 'ID de rol inválido' });
+  }
+
   try {
+    // Verificar que el rol existe
     const rolExiste = await prisma.rol.findUnique({ where: { idrol } });
-    if (!rolExiste) return res.status(404).json({ message: 'Rol no encontrado' });
+    if (!rolExiste) {
+      return res.status(404).json({ message: 'Rol no encontrado' });
+    }
 
-    await prisma.rol.update({
-      where: { idrol },
-      data: {
-        rol: rol?.trim() ?? undefined,
-        descripcion: descripcion?.trim() ?? undefined,
-        estado
-      }
-    });
+    // Si se está actualizando el nombre, verificar que no exista otro rol con ese nombre
+    if (rol && rol.trim() && rol.trim().toLowerCase() !== rolExiste.rol.toLowerCase()) {
+      const nombreExiste = await prisma.rol.findFirst({
+        where: {
+          rol: {
+            equals: rol.trim(),
+            mode: 'insensitive'
+          },
+          idrol: { not: idrol }
+        }
+      });
 
-    if (Array.isArray(permisos)) {
-      await prisma.rolpermiso.updateMany({ where: { idrol }, data: { estado: false } });
-
-      for (const idpermiso of permisos) {
-        await prisma.rolpermiso.upsert({
-          where: { idrol_idpermiso: { idrol, idpermiso } },
-          update: { estado: true },
-          create: { idrol, idpermiso, estado: true }
-        });
+      if (nombreExiste) {
+        return res.status(400).json({ message: 'Ya existe otro rol con este nombre' });
       }
     }
 
-    res.json({ message: 'Rol actualizado correctamente' });
+    // Validar permisos si vienen en la petición
+    if (Array.isArray(permisos) && permisos.length > 0) {
+      const permisosValidos = await prisma.permisos.findMany({
+        where: { 
+          idpermiso: { in: permisos },
+          estado: true 
+        },
+        select: { idpermiso: true }
+      });
+
+      if (permisosValidos.length !== permisos.length) {
+        return res.status(400).json({ message: "Algunos permisos no son válidos" });
+      }
+    }
+
+    // Actualizar en transacción
+    const resultado = await prisma.$transaction(async (tx) => {
+      // Actualizar datos básicos del rol
+      const rolActualizado = await tx.rol.update({
+        where: { idrol },
+        data: {
+          rol: rol?.trim() || undefined,
+          descripcion: descripcion?.trim() || undefined,
+          estado: estado !== undefined ? estado : undefined
+        }
+      });
+
+      // Actualizar permisos si vienen en la petición
+      if (Array.isArray(permisos)) {
+        // Desactivar todos los permisos actuales
+        await tx.rolpermiso.updateMany({ 
+          where: { idrol }, 
+          data: { estado: false } 
+        });
+
+        // Asignar nuevos permisos
+        if (permisos.length > 0) {
+          for (const idpermiso of permisos) {
+            await tx.rolpermiso.upsert({
+              where: { 
+                idrol_idpermiso: { idrol, idpermiso } 
+              },
+              update: { estado: true },
+              create: { idrol, idpermiso, estado: true }
+            });
+          }
+        }
+      }
+
+      return rolActualizado;
+    });
+
+    res.json({ 
+      message: 'Rol actualizado correctamente',
+      rol: resultado
+    });
+
   } catch (error) {
+    console.error('Error al actualizar rol:', error);
+    
+    if (error.code === 'P2002') {
+      return res.status(400).json({ message: 'Ya existe otro rol con este nombre' });
+    }
+    
     res.status(500).json({ message: 'Error al actualizar rol', error: error.message });
   }
 };
 
-// Cambiar solo estado del rol
+// Cambiar solo estado del rol - MEJORADO
 exports.changeState = async (req, res) => {
   const idrol = parseInt(req.params.id);
   const { estado } = req.body;
 
+  console.log(`Cambiando estado del rol ${idrol} a ${estado}`);
+
+  if (isNaN(idrol)) {
+    return res.status(400).json({ message: 'ID de rol inválido' });
+  }
+
+  if (typeof estado !== 'boolean') {
+    return res.status(400).json({ message: 'El estado debe ser un valor booleano' });
+  }
+
   try {
+    // Verificar que el rol existe
+    const rolExiste = await prisma.rol.findUnique({ where: { idrol } });
+    if (!rolExiste) {
+      return res.status(404).json({ message: 'Rol no encontrado' });
+    }
+
+    // Actualizar solo el estado
     const rol = await prisma.rol.update({
       where: { idrol },
       data: { estado }
     });
 
-    res.json(rol);
+    console.log('Estado actualizado correctamente:', rol);
+
+    res.json({
+      message: `Rol ${estado ? 'activado' : 'desactivado'} correctamente`,
+      rol: {
+        idrol: rol.idrol,
+        rol: rol.rol,
+        descripcion: rol.descripcion,
+        estado: rol.estado
+      }
+    });
   } catch (error) {
+    console.error('Error al cambiar estado:', error);
+    
+    if (error.code === 'P2025') {
+      return res.status(404).json({ message: 'Rol no encontrado' });
+    }
+    
     res.status(500).json({ message: 'Error al cambiar estado', error: error.message });
   }
 };
@@ -148,31 +304,58 @@ exports.changeState = async (req, res) => {
 exports.remove = async (req, res) => {
   const idrol = parseInt(req.params.id);
 
+  if (isNaN(idrol)) {
+    return res.status(400).json({ message: 'ID de rol inválido' });
+  }
+
   try {
+    // Verificar si tiene usuarios asociados
     const usuarios = await prisma.usuarios.count({ where: { idrol } });
     if (usuarios > 0) {
-      return res.status(400).json({ message: 'No se puede eliminar el rol porque tiene usuarios asociados' });
+      return res.status(400).json({ 
+        message: 'No se puede eliminar el rol porque tiene usuarios asociados' 
+      });
     }
 
-    await prisma.rolpermiso.deleteMany({ where: { idrol } });
-    await prisma.rol.delete({ where: { idrol } });
+    // Eliminar en transacción
+    await prisma.$transaction(async (tx) => {
+      // Eliminar permisos asociados
+      await tx.rolpermiso.deleteMany({ where: { idrol } });
+      
+      // Eliminar el rol
+      await tx.rol.delete({ where: { idrol } });
+    });
 
     res.json({ message: 'Rol eliminado correctamente' });
+
   } catch (error) {
+    console.error('Error al eliminar rol:', error);
+    
+    if (error.code === 'P2025') {
+      return res.status(404).json({ message: 'Rol no encontrado' });
+    }
+    
     res.status(500).json({ message: 'Error al eliminar rol', error: error.message });
   }
 };
 
 /* ===========================================================
-   📌 Permisos
+   🔌 Permisos
 =========================================================== */
 
 // Obtener todos los permisos activos
 exports.getPermisos = async (req, res) => {
   try {
-    const permisos = await prisma.permisos.findMany({ where: { estado: true } });
+    const permisos = await prisma.permisos.findMany({ 
+      where: { estado: true },
+      orderBy: [
+        { modulo: 'asc' },
+        { descripcion: 'asc' }
+      ]
+    });
     res.json(permisos);
   } catch (error) {
+    console.error('Error al obtener permisos:', error);
     res.status(500).json({ message: 'Error al obtener permisos', error: error.message });
   }
 };
@@ -180,63 +363,59 @@ exports.getPermisos = async (req, res) => {
 // Obtener permisos de un rol
 exports.getPermisosByRol = async (req, res) => {
   const idrol = parseInt(req.params.id);
+  
+  if (isNaN(idrol)) {
+    return res.status(400).json({ message: 'ID de rol inválido' });
+  }
+
   try {
     const permisos = await prisma.rolpermiso.findMany({
       where: { idrol, estado: true },
-      include: { permisos: true }
+      include: { 
+        permisos: {
+          where: { estado: true }
+        }
+      }
     });
 
+    // Filtrar solo los permisos que están activos
+    const permisosActivos = permisos.filter(p => p.permisos);
+
     res.json(
-      permisos.map(p => ({
+      permisosActivos.map(p => ({
         idpermiso: p.permisos.idpermiso,
         modulo: p.permisos.modulo,
         descripcion: p.permisos.descripcion
       }))
     );
   } catch (error) {
+    console.error('Error al obtener permisos del rol:', error);
     res.status(500).json({ message: 'Error al obtener permisos', error: error.message });
   }
 };
 
-// Agregar permisos a un rol
-exports.addPermisosToRol = async (req, res) => {
+// Verificar si un rol tiene usuarios asociados
+exports.getRolUsuarios = async (req, res) => {
   const idrol = parseInt(req.params.id);
-  const { permisos } = req.body;
-
-  if (!Array.isArray(permisos)) {
-    return res.status(400).json({ message: 'Los permisos deben ser un array' });
+  
+  if (isNaN(idrol)) {
+    return res.status(400).json({ message: 'ID de rol inválido' });
   }
 
   try {
-    await prisma.rolpermiso.createMany({
-      data: permisos.map(idpermiso => ({ idrol, idpermiso, estado: true })),
-      skipDuplicates: true
+    const usuarios = await prisma.usuarios.findMany({
+      where: { idrol },
+      select: { 
+        idusuario: true,
+        nombre: true,
+        apellido: true,
+        correo: true
+      }
     });
 
-    res.json({ message: 'Permisos asignados exitosamente' });
+    res.json(usuarios);
   } catch (error) {
-    res.status(500).json({ message: 'Error al asignar permisos', error: error.message });
-  }
-};
-
-// Actualizar permisos de un rol
-exports.updatePermisosRol = async (req, res) => {
-  const idrol = parseInt(req.params.id);
-  const { permisos } = req.body;
-
-  try {
-    await prisma.rolpermiso.updateMany({ where: { idrol }, data: { estado: false } });
-
-    for (const idpermiso of permisos) {
-      await prisma.rolpermiso.upsert({
-        where: { idrol_idpermiso: { idrol, idpermiso } },
-        update: { estado: true },
-        create: { idrol, idpermiso, estado: true }
-      });
-    }
-
-    res.json({ message: 'Permisos actualizados correctamente' });
-  } catch (error) {
-    res.status(500).json({ message: 'Error al actualizar permisos', error: error.message });
+    console.error('Error al obtener usuarios del rol:', error);
+    res.status(500).json({ message: 'Error al obtener usuarios del rol', error: error.message });
   }
 };
