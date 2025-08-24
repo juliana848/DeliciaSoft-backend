@@ -325,16 +325,23 @@ model usuarios {
 }
 
 model venta {
-  idventa                        Int            @id @default(autoincrement())
-  fechaventa                     DateTime?      @db.Date
-  cliente                        Int?
-  idsede                         Int?
-  metodopago                     String?        @db.VarChar(10)
-  tipoventa                      String?        @db.VarChar(10)
-  estadoventa                    Boolean?
-  total                          Decimal?       @db.Decimal(10, 2)
-  detalleventa                   detalleventa[]
-  pedido                         pedido[]
-  cliente_venta_clienteTocliente cliente?       @relation("venta_clienteTocliente", fields: [cliente], references: [idcliente], onDelete: NoAction, onUpdate: NoAction)
-  sede                           sede?          @relation(fields: [idsede], references: [idsede], onDelete: NoAction, onUpdate: NoAction)
+  idventa                                    Int            @id @default(autoincrement())
+  fechaventa                                 DateTime?      @db.Date
+  cliente                                    Int?
+  idsede                                     Int?
+  metodopago                                 String?        @db.VarChar(10)
+  tipoventa                                  String?        @db.VarChar(10)
+  total                                      Decimal?       @db.Decimal(10, 2)
+  estadoventa                                Int?
+  detalleventa                               detalleventa[]
+  pedido                                     pedido[]
+  cliente_venta_clienteTocliente             cliente?       @relation("venta_clienteTocliente", fields: [cliente], references: [idcliente], onDelete: NoAction, onUpdate: NoAction)
+  estadoventa_venta_estadoventaToestadoventa estadoventa?   @relation("venta_estadoventaToestadoventa", fields: [estadoventa], references: [idestadoventa], onDelete: NoAction, onUpdate: NoAction, map: "venta_idestado_fkey")
+  sede                                       sede?          @relation(fields: [idsede], references: [idsede], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model estadoventa {
+  idestadoventa                        Int     @id @default(autoincrement())
+  nombre_estado                        String  @db.VarChar(50)
+  venta_venta_estadoventaToestadoventa venta[] @relation("venta_estadoventaToestadoventa")
 }
