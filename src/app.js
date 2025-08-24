@@ -61,6 +61,9 @@ app.use('/api/detalleventa', detalleVentaRoutes);
 const estadoproduccionRoutes = require('./routes/estadoproduccion.routes');
 app.use('/api/estadoproduccion', estadoproduccionRoutes);
 
+const estadoventaRoutes = require('./routes/estadoventa.routes');
+app.use('/api/estadoventa', estadoventaRoutes);
+
 const imagenesRoutes = require('./routes/imagenes.routes');
 app.use('/api/imagenes', imagenesRoutes);
 
@@ -115,6 +118,5 @@ app.get('/test-env', (req, res) => {
     CLOUDINARY_API_KEY: process.env.CLOUDINARY_API_KEY ? '✅ OK' : '❌ MISSING',
   });
 });
-
 
 module.exports = app;
