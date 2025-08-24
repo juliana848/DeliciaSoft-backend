@@ -9,6 +9,7 @@ exports.getAll = async (req, res) => {
         pedido: true,
         cliente_venta_clienteTocliente: true,
         sede: true,
+        estadoventa_venta_estadoventaToestadoventa: true, 
       }
     });
     res.json(ventas);
@@ -27,6 +28,7 @@ exports.getById = async (req, res) => {
         pedido: true,
         cliente_venta_clienteTocliente: true,
         sede: true,
+        estadoventa_venta_estadoventaToestadoventa: true,  
       }
     });
     if (!venta) return res.status(404).json({ message: 'Venta no encontrada' });
@@ -55,8 +57,10 @@ exports.create = async (req, res) => {
         idsede,
         metodopago,
         tipoventa,
-        estadoventa,
         total,
+        estadoventa_venta_estadoventaToestadoventa: {
+          connect: { idestadoventa: estadoventa }  
+        }
       }
     });
 
@@ -90,8 +94,10 @@ exports.update = async (req, res) => {
         idsede,
         metodopago,
         tipoventa,
-        estadoventa,
         total,
+        estadoventa_venta_estadoventaToestadoventa: {
+          connect: { idestadoventa: estadoventa }  
+        }
       }
     });
 
