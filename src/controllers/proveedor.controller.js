@@ -16,7 +16,7 @@ exports.getById = async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const proveedor = await prisma.proveedor.findUnique({
-      where: { IdProveedor: id }   
+      where: { Idproveedor: id }   
     });
     if (!proveedor) return res.status(404).json({ message: 'Proveedor no encontrado' });
     res.json(proveedor);
@@ -65,30 +65,37 @@ exports.update = async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const {
-      TipoDocumento,
-      Documento,
-      NombreEmpresa,
-      NombreProveedor,
-      Contacto,
-      Correo,
-      Direccion,
-      Estado
+      tipodocumento,
+      documento,
+      nombreempresa,
+      nombreproveedor,
+      contacto,
+      correo,
+      direccion,
+      estado
     } = req.body;
 
-    const proveedorExiste = await prisma.proveedor.findUnique({ where: { IdProveedor: id } });
-    if (!proveedorExiste) return res.status(404).json({ message: 'Proveedor no encontrado' });
+    // buscar proveedor existente
+    const proveedorExiste = await prisma.proveedor.findUnique({ 
+      where: { idproveedor: id } 
+    });
 
+    if (!proveedorExiste) {
+      return res.status(404).json({ message: 'Proveedor no encontrado' });
+    }
+
+    // actualizar proveedor
     const actualizado = await prisma.proveedor.update({
-      where: { IdProveedor: id },
+      where: { idproveedor: id },
       data: {
-        TipoDocumento,
-        Documento: Documento ? parseInt(Documento) : null,
-        NombreEmpresa,
-        NombreProveedor,
-        Contacto: Contacto ? parseInt(Contacto) : null,
-        Correo,
-        Direccion,
-        Estado
+        tipodocumento,
+        documento: documento ? parseInt(documento) : null,
+        nombreempresa,
+        nombreproveedor,
+        contacto: contacto ? parseInt(contacto) : null,
+        correo,
+        direccion,
+        estado
       }
     });
 
@@ -97,16 +104,27 @@ exports.update = async (req, res) => {
     res.status(500).json({ message: 'Error al actualizar proveedor', error: error.message });
   }
 };
+
 // Eliminar proveedor
 exports.remove = async (req, res) => {
   try {
     const id = parseInt(req.params.id);
-    const proveedorExiste = await prisma.proveedor.findUnique({ where: { IdProveedor: id } });
-    if (!proveedorExiste) return res.status(404).json({ message: 'Proveedor no encontrado' });
 
-    await prisma.proveedor.delete({ where: { IdProveedor: id } });
+    const proveedorExiste = await prisma.proveedor.findUnique({ 
+      where: { idproveedor: id } 
+    });
+
+    if (!proveedorExiste) {
+      return res.status(404).json({ message: 'Proveedor no encontrado' });
+    }
+
+    await prisma.proveedor.delete({ where: { idproveedor: id } });
+
     res.json({ message: 'Proveedor eliminado correctamente' });
   } catch (error) {
-    res.status(500).json({ message: 'Error al eliminar proveedor', error: error.message });
-  }
+    res.status(500).json({ 
+      message: 'Error al eliminar proveedor', 
+      error: error.message 
+    });
+  }
 };
