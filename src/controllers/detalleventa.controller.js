@@ -1,77 +1,103 @@
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
-// Obtener todos los estados de venta
+// Obtener todos los detalles de venta
 exports.getAll = async (req, res) => {
   try {
-    const estados = await prisma.estadoventa.findMany();
-    res.json(estados);
+    const detalles = await prisma.detalleventa.findMany({
+      include: {
+        productogeneral: true, // trae info del producto
+        venta: true,           // trae info de la venta
+      }
+    });
+    res.json(detalles);
   } catch (error) {
-    res.status(500).json({ message: 'Error al obtener los estados de venta', error: error.message });
+    res.status(500).json({ message: 'Error al obtener los detalles de venta', error: error.message });
   }
 };
 
-// Obtener un estado de venta por su ID
+// Obtener un detalle de venta por ID
 exports.getById = async (req, res) => {
   try {
     const id = parseInt(req.params.id);
-    const estado = await prisma.estadoventa.findUnique({
-      where: { idestadoventa: id },
+    const detalle = await prisma.detalleventa.findUnique({
+      where: { iddetalleventa: id },
+      include: {
+        productogeneral: true,
+        venta: true,
+      }
     });
-    if (!estado) return res.status(404).json({ message: 'Estado de venta no encontrado' });
-    res.json(estado);
+    if (!detalle) return res.status(404).json({ message: 'Detalle de venta no encontrado' });
+    res.json(detalle);
   } catch (error) {
-    res.status(500).json({ message: 'Error al obtener el estado de venta', error: error.message });
+    res.status(500).json({ message: 'Error al obtener el detalle de venta', error: error.message });
   }
 };
 
-// Crear un nuevo estado de venta
+// Obtener todos los detalles de una venta específica
+exports.getByVenta = async (req, res) => {
+  try {
+    const idVenta = parseInt(req.params.idVenta);
+    const detalles = await prisma.detalleventa.findMany({
+      where: { idventa: idVenta },
+      include: { productogeneral: true },
+    });
+    res.json(detalles);
+  } catch (error) {
+    res.status(500).json({ message: 'Error al obtener detalles de la venta', error: error.message });
+  }
+};
+
+// Crear un detalle de venta
 exports.create = async (req, res) => {
   try {
-    const { nombre_estado } = req.body;
-    const nuevoEstado = await prisma.estadoventa.create({
+    const { idventa, idproductogeneral, cantidad, preciounitario, subtotal, iva } = req.body;
+    const nuevoDetalle = await prisma.detalleventa.create({
       data: {
-        nombre_estado,
+        idventa,
+        idproductogeneral,
+        cantidad,
+        preciounitario,
+        subtotal,
+        iva,
       },
     });
-    res.status(201).json(nuevoEstado);
+    res.status(201).json(nuevoDetalle);
   } catch (error) {
-    res.status(500).json({ message: 'Error al crear el estado de venta', error: error.message });
+    res.status(500).json({ message: 'Error al crear el detalle de venta', error: error.message });
   }
 };
 
-// Actualizar un estado de venta
+// Actualizar un detalle de venta
 exports.update = async (req, res) => {
   try {
     const id = parseInt(req.params.id);
-    const { nombre_estado } = req.body;
+    const { cantidad, preciounitario, subtotal, iva } = req.body;
 
-    const estadoExiste = await prisma.estadoventa.findUnique({ where: { idestadoventa: id } });
-    if (!estadoExiste) return res.status(404).json({ message: 'Estado de venta no encontrado' });
+    const detalleExiste = await prisma.detalleventa.findUnique({ where: { iddetalleventa: id } });
+    if (!detalleExiste) return res.status(404).json({ message: 'Detalle de venta no encontrado' });
 
-    const estadoActualizado = await prisma.estadoventa.update({
-      where: { idestadoventa: id },
-      data: {
-        nombre_estado,
-      },
+    const detalleActualizado = await prisma.detalleventa.update({
+      where: { iddetalleventa: id },
+      data: { cantidad, preciounitario, subtotal, iva },
     });
-    res.json(estadoActualizado);
+    res.json(detalleActualizado);
   } catch (error) {
-    res.status(500).json({ message: 'Error al actualizar el estado de venta', error: error.message });
+    res.status(500).json({ message: 'Error al actualizar el detalle de venta', error: error.message });
   }
 };
 
-// Eliminar un estado de venta
+// Eliminar un detalle de venta
 exports.remove = async (req, res) => {
   try {
     const id = parseInt(req.params.id);
 
-    const estadoExiste = await prisma.estadoventa.findUnique({ where: { idestadoventa: id } });
-    if (!estadoExiste) return res.status(404).json({ message: 'Estado de venta no encontrado' });
+    const detalleExiste = await prisma.detalleventa.findUnique({ where: { iddetalleventa: id } });
+    if (!detalleExiste) return res.status(404).json({ message: 'Detalle de venta no encontrado' });
 
-    await prisma.estadoventa.delete({ where: { idestadoventa: id } });
-    res.json({ message: 'Estado de venta eliminado correctamente' });
+    await prisma.detalleventa.delete({ where: { iddetalleventa: id } });
+    res.json({ message: 'Detalle de venta eliminado correctamente' });
   } catch (error) {
-    res.status(500).json({ message: 'Error al eliminar el estado de venta', error: error.message });
+    res.status(500).json({ message: 'Error al eliminar el detalle de venta', error: error.message });
   }
 };
