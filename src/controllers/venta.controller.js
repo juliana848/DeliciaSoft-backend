@@ -9,7 +9,7 @@ exports.getAll = async (req, res) => {
         pedido: true,
         cliente_venta_clienteTocliente: true,
         sede: true,
-        estadoventa_venta_estadoventaToestadoventa: true,
+        estadoventa: true, // ✅ relación corregida
       }
     });
     res.json(ventas);
@@ -28,7 +28,7 @@ exports.getById = async (req, res) => {
         pedido: true,
         cliente_venta_clienteTocliente: true,
         sede: true,
-        estadoventa_venta_estadoventaToestadoventa: true,
+        estadoventa: true, // ✅ relación corregida
       }
     });
     if (!venta) return res.status(404).json({ message: 'Venta no encontrada' });
@@ -58,8 +58,8 @@ exports.create = async (req, res) => {
         metodopago,
         tipoventa,
         total,
-        estadoventa_venta_estadoventaToestadoventa: {
-          connect: { idestadoventa: estadoventa }
+        estadoventa: {
+          connect: { idestadoventa: estadoventa } // ✅ relación corregida
         }
       }
     });
@@ -95,8 +95,8 @@ exports.update = async (req, res) => {
         metodopago,
         tipoventa,
         total,
-        estadoventa_venta_estadoventaToestadoventa: {
-          connect: { idestadoventa: estadoventa }
+        estadoventa: {
+          connect: { idestadoventa: estadoventa } // ✅ relación corregida
         }
       }
     });

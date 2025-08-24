@@ -4,7 +4,7 @@ const prisma = new PrismaClient();
 // Obtener todos los estados de venta
 exports.getAll = async (req, res) => {
   try {
-    const estados = await prisma.estadoventa.findMany();
+    const estados = await prisma.estadoventa.findMany(); // ✅ nombre corregido
     res.json(estados);
   } catch (error) {
     res.status(500).json({ message: 'Error al obtener los estados de venta', error: error.message });
@@ -15,7 +15,7 @@ exports.getAll = async (req, res) => {
 exports.getById = async (req, res) => {
   try {
     const id = parseInt(req.params.id);
-    const estado = await prisma.estadoventa.findUnique({
+    const estado = await prisma.estadoventa.findUnique({ // ✅ nombre corregido
       where: { idestadoventa: id },
     });
     if (!estado) return res.status(404).json({ message: 'Estado de venta no encontrado' });
@@ -29,10 +29,8 @@ exports.getById = async (req, res) => {
 exports.create = async (req, res) => {
   try {
     const { nombre_estado } = req.body;
-    const nuevoEstado = await prisma.estadoventa.create({
-      data: {
-        nombre_estado,
-      },
+    const nuevoEstado = await prisma.estadoventa.create({ // ✅ nombre corregido
+      data: { nombre_estado },
     });
     res.status(201).json(nuevoEstado);
   } catch (error) {
@@ -51,9 +49,7 @@ exports.update = async (req, res) => {
 
     const estadoActualizado = await prisma.estadoventa.update({
       where: { idestadoventa: id },
-      data: {
-        nombre_estado,
-      },
+      data: { nombre_estado },
     });
     res.json(estadoActualizado);
   } catch (error) {
