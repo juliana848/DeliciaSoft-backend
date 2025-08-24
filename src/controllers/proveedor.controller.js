@@ -25,7 +25,7 @@ exports.getById = async (req, res) => {
   }
 };
 
-// Crear proveedor
+ // Crear proveedor
 exports.create = async (req, res) => {
   try {
     const {
@@ -58,6 +58,7 @@ exports.create = async (req, res) => {
     res.status(500).json({ message: 'Error al crear proveedor', error: error.message });
   }
 };
+
 
 // Actualizar proveedor
 exports.update = async (req, res) => {
@@ -96,7 +97,6 @@ exports.update = async (req, res) => {
     res.status(500).json({ message: 'Error al actualizar proveedor', error: error.message });
   }
 };
-
 // Eliminar proveedor
 exports.remove = async (req, res) => {
   try {
@@ -107,7 +107,6 @@ exports.remove = async (req, res) => {
     await prisma.proveedor.delete({ where: { IdProveedor: id } });
     res.json({ message: 'Proveedor eliminado correctamente' });
   } catch (error) {
-    res.status(500).json({ message: 'Error al eliminar proveedor', error: error.message });
-  }
+    res.status(500).json({ message: 'Error al eliminar proveedor', error: error.message });
+  }
 };
-
