@@ -10,4 +10,7 @@ router.post('/', clienteController.createCliente);
 router.put('/:id', clienteController.updateCliente);
 router.delete('/:id', clienteController.deleteCliente);
 
+// Ruta para activar/desactivar cliente
+router.patch('/:id/estado', clienteController.toggleEstadoCliente);
+
 module.exports = router;

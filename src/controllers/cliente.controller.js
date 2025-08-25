@@ -90,7 +90,37 @@ const deleteCliente = async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: "Error al eliminar cliente", error: error.message });
   }
+  
 };
+
+// Cambiar estado del cliente
+const toggleEstadoCliente = async (req, res) => {
+  const id = parseInt(req.params.id);
+
+  try {
+    // Buscar cliente
+    const cliente = await prisma.cliente.findUnique({ where: { idcliente: id } });
+    if (!cliente) {
+      return res.status(404).json({ message: "Cliente no encontrado" });
+    }
+
+    // Invertir estado actual (si es null, lo pongo en true por defecto)
+    const nuevoEstado = cliente.estado === true ? false : true;
+
+    const clienteActualizado = await prisma.cliente.update({
+      where: { idcliente: id },
+      data: { estado: nuevoEstado }
+    });
+
+    res.json({
+      message: `Cliente ${nuevoEstado ? "activado" : "desactivado"} correctamente`,
+      cliente: clienteActualizado
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Error al cambiar estado", error: error.message });
+  }
+};
+
 
 module.exports = {
   validateCliente,
@@ -98,5 +128,6 @@ module.exports = {
   getCliente,
   createCliente,
   updateCliente,
-  deleteCliente
+  deleteCliente,
+  toggleEstadoCliente
 };
