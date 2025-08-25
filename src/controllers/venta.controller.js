@@ -5,14 +5,26 @@ exports.getAll = async (req, res) => {
   try {
     const ventas = await prisma.venta.findMany({
       include: {
-        detalleventa: true,
-        pedido: true,
-        cliente_venta_clienteTocliente: true,
-        sede: true,
-        estadoventa: true
+        detalleventa: { select: { iddetalleventa: true } },
+        clienteData: { select: { idcliente: true } },
+        sede: { select: { idsede: true } },
+        estadoVenta: { select: { idestadoventa: true } }
       }
     });
-    res.json(ventas);
+
+    const ventasTransformadas = ventas.map(v => ({
+      idventa: v.idventa,
+      fechaventa: v.fechaventa,
+      total: v.total,
+      metodopago: v.metodopago,
+      tipoventa: v.tipoventa,
+      detalleventa: v.detalleventa.map(d => d.iddetalleventa), // array simple de IDs
+      cliente: v.clienteData ? v.clienteData.idcliente : null, // número directo
+      sede: v.sede ? v.sede.idsede : null, // número directo
+      estadoVenta: v.estadoVenta ? v.estadoVenta.idestadoventa : null // número directo
+    }));
+
+    res.json(ventasTransformadas);
   } catch (error) {
     res.status(500).json({ message: 'Error al obtener ventas', error: error.message });
   }
@@ -24,15 +36,28 @@ exports.getById = async (req, res) => {
     const venta = await prisma.venta.findUnique({
       where: { idventa: id },
       include: {
-        detalleventa: true,
-        pedido: true,
-        cliente_venta_clienteTocliente: true,
-        sede: true,
-        estadoventa: true, // ✅ relación corregida
+        detalleventa: { select: { iddetalle: true } },
+        clienteData: { select: { idcliente: true } },
+        sede: { select: { idsede: true } },
+        estadoVenta: { select: { idestadoventa: true } }
       }
     });
+
     if (!venta) return res.status(404).json({ message: 'Venta no encontrada' });
-    res.json(venta);
+
+    const ventaTransformada = {
+      idventa: venta.idventa,
+      fechaventa: venta.fechaventa,
+      total: venta.total,
+      metodopago: venta.metodopago,
+      tipoventa: venta.tipoventa,
+      detalleventa: venta.detalleventa.map(d => d.iddetalle),
+      cliente: venta.clienteData ? { id: venta.clienteData.idcliente } : null,
+      sede: venta.sede ? { id: venta.sede.idsede } : null,
+      estadoVenta: venta.estadoVenta ? { id: venta.estadoVenta.idestadoventa } : null
+    };
+
+    res.json(ventaTransformada);
   } catch (error) {
     res.status(500).json({ message: 'Error al obtener venta', error: error.message });
   }
@@ -46,7 +71,7 @@ exports.create = async (req, res) => {
       idsede,
       metodopago,
       tipoventa,
-      estadoventa,
+      estadoVentaId,
       total
     } = req.body;
 
@@ -58,7 +83,7 @@ exports.create = async (req, res) => {
         metodopago,
         tipoventa,
         total,
-        estadoventa,
+        estadoVentaId
       }
     });
 
@@ -77,7 +102,7 @@ exports.update = async (req, res) => {
       idsede,
       metodopago,
       tipoventa,
-      estadoventa,
+      estadoVentaId,
       total
     } = req.body;
 
@@ -93,7 +118,7 @@ exports.update = async (req, res) => {
         metodopago,
         tipoventa,
         total,
-        estadoventa,
+        estadoVentaId
       }
     });
 
