@@ -1,4 +1,4 @@
-// src/services/venta_services.js
+// src/controllers/venta.controller.js
 
 const API_BASE_URL = 'https://deliciasoft-backend.onrender.com/api';
 
@@ -43,7 +43,7 @@ class VentaApiService {
       cantidadPagar: parseFloat(abono.cantidadpagar),
     }));
   }
-  
+
   // N U E V O S    S E R V I C I O S    D E    A P I
   async obtenerClientes() {
     try {
@@ -88,7 +88,7 @@ class VentaApiService {
       throw new Error('No se pudo obtener la lista de estados de venta.');
     }
   }
-  
+
   // F U N C I O N E S    A C T U A L I Z A D A S
   async obtenerVentas() {
     let estadosVenta = [];
@@ -160,7 +160,7 @@ class VentaApiService {
 
       const ventaData = await responseVenta.json();
       const detalleData = await responseDetalle.json();
-      
+
       // Obtener los abonos por separado, ya que el controlador de venta no los trae directamente
       const responseAbonos = await fetch(`${API_BASE_URL}/abonos?idpedido=${id}`);
       const abonosData = await responseAbonos.json();
@@ -256,5 +256,51 @@ class VentaApiService {
   }
 }
 
-const ventaApiService = new VentaApiService();
-export default ventaApiService;
+// Creamos una única instancia del servicio
+const ventaService = new VentaApiService();
+
+// Las funciones del controlador que se exportan y usan en las rutas
+const getAll = async (req, res) => {
+  try {
+    const ventas = await ventaService.obtenerVentas();
+    res.json(ventas);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+const getById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const venta = await ventaService.obtenerVentaPorId(id);
+    res.json(venta);
+  } catch (error) {
+    res.status(404).json({ error: error.message });
+  }
+};
+
+const create = async (req, res) => {
+  try {
+    const nuevaVenta = await ventaService.crearVenta(req.body);
+    res.status(201).json(nuevaVenta);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+const update = async (req, res) => {
+  res.status(501).json({ message: "Update function not implemented yet." });
+};
+
+const remove = async (req, res) => {
+  res.status(501).json({ message: "Remove function not implemented yet." });
+};
+
+// Exportamos las funciones del controlador
+module.exports = {
+  getAll,
+  getById,
+  create,
+  update,
+  remove,
+};
