@@ -9,7 +9,7 @@ exports.getAll = async (req, res) => {
         pedido: true,
         cliente_venta_clienteTocliente: true,
         sede: true,
-        estadoventa: true, // ✅ relación corregida
+        estadoventa: true
       }
     });
     res.json(ventas);
@@ -58,9 +58,7 @@ exports.create = async (req, res) => {
         metodopago,
         tipoventa,
         total,
-        estadoventa: {
-          connect: { idestadoventa: estadoventa } // ✅ relación corregida
-        }
+        estadoventa,
       }
     });
 
@@ -95,9 +93,7 @@ exports.update = async (req, res) => {
         metodopago,
         tipoventa,
         total,
-        estadoventa: {
-          connect: { idestadoventa: estadoventa } // ✅ relación corregida
-        }
+        estadoventa,
       }
     });
 
