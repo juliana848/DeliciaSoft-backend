@@ -8,7 +8,7 @@ const prisma = new PrismaClient();
 const verificationCodes = {}; // Memoria temporal
 
 // Configuración del transporter
-const transporter = nodemailer.createTransporter({
+const transporter = nodemailer.createTransport({
   host: 'smtp.gmail.com',
   port: 587,
   secure: false, // STARTTLS
@@ -20,6 +20,7 @@ const transporter = nodemailer.createTransporter({
     rejectUnauthorized: false // ⛔ Ignora la validación de certificado
   }
 });
+
 
 // Generar JWT
 function generateJwtToken(correo, userType) {
