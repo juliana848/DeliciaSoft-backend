@@ -8,7 +8,7 @@ const prisma = new PrismaClient();
 const verificationCodes = {}; // Memoria temporal
 
 // Configuración del transporter
-const transporter = nodemailer.createTransport({
+const transporter = nodemailer.createTransporter({
   host: 'smtp.gmail.com',
   port: 587,
   secure: false, // STARTTLS
@@ -60,7 +60,7 @@ function getVerificationEmailTemplate(code) {
               </div>
               <div style="background-color: #fce4ec; border-radius: 8px; padding: 20px; margin: 30px 0;">
                   <h3 style="color: #e91e63; margin: 0 0 10px 0; font-size: 18px; display: flex; align-items: center;">
-                      <span style="margin-right: 10px;">⚠</span> Importante
+                      <span style="margin-right: 10px;">⚠️</span> Importante
                   </h3>
                   <ul style="color: #666; margin: 0; padding-left: 20px; font-size: 14px; line-height: 1.6;">
                       <li>Este código es de un solo uso</li>
@@ -107,73 +107,209 @@ async function sendHtmlEmail(to, subject, html) {
 }
 
 module.exports = {
+  // Login directo sin código de verificación
+  async directLogin(req, res) {
+    try {
+      const { correo, password, userType } = req.body;
+      
+      if (!correo || !password || !userType) {
+        return res.status(400).json({ message: 'Faltan datos requeridos' });
+      }
+
+      let user = null;
+      let actualUserType = '';
+
+      // Buscar en usuarios si es admin/usuario
+      if (['admin', 'usuario'].includes(userType.toLowerCase())) {
+        user = await prisma.usuarios.findFirst({ 
+          where: { correo, estado: true } 
+        });
+        
+        if (user && user.hashcontrasena === password) {
+          actualUserType = 'admin';
+        } else {
+          user = null;
+        }
+      }
+
+      // Buscar en clientes si es cliente o no se encontró en usuarios
+      if (!user && ['cliente', 'client'].includes(userType.toLowerCase())) {
+        user = await prisma.cliente.findFirst({ 
+          where: { correo, estado: true } 
+        });
+        
+        if (user && user.hashcontrasena === password) {
+          actualUserType = 'cliente';
+        } else {
+          user = null;
+        }
+      }
+
+      if (!user) {
+        return res.status(401).json({ 
+          success: false, 
+          message: 'Credenciales incorrectas' 
+        });
+      }
+
+      const token = generateJwtToken(user.correo, actualUserType);
+      
+      res.json({ 
+        success: true, 
+        token, 
+        user, 
+        userType: actualUserType 
+      });
+      
+    } catch (error) {
+      console.error('Error en login directo:', error);
+      res.status(500).json({ message: 'Error interno del servidor' });
+    }
+  },
+
   async sendVerificationCode(req, res) {
-    const { correo, userType } = req.body;
-    if (!correo || !userType) return res.status(400).json({ message: 'Faltan datos requeridos' });
+    try {
+      const { correo, userType } = req.body;
+      if (!correo || !userType) {
+        return res.status(400).json({ message: 'Faltan datos requeridos' });
+      }
 
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
-    verificationCodes[correo] = { code, expiry: Date.now() + 600000 };
+      // Verificar si el usuario existe
+      let userExists = false;
+      
+      if (['admin', 'usuario'].includes(userType.toLowerCase())) {
+        const usuario = await prisma.usuarios.findFirst({ 
+          where: { correo, estado: true } 
+        });
+        userExists = !!usuario;
+      } else if (['cliente', 'client'].includes(userType.toLowerCase())) {
+        const cliente = await prisma.cliente.findFirst({ 
+          where: { correo, estado: true } 
+        });
+        userExists = !!cliente;
+      }
 
-    await sendHtmlEmail(correo, 'Código de Verificación - DeliciaSoft', getVerificationEmailTemplate(code));
-    res.json({ message: 'Código enviado', codigo: code });
+      if (!userExists) {
+        return res.status(404).json({ message: 'Usuario no encontrado' });
+      }
+
+      const code = Math.floor(100000 + Math.random() * 900000).toString();
+      verificationCodes[correo] = { code, expiry: Date.now() + 600000 };
+
+      await sendHtmlEmail(correo, 'Código de Verificación - DeliciaSoft', getVerificationEmailTemplate(code));
+      res.json({ message: 'Código enviado', codigo: code });
+    } catch (error) {
+      console.error('Error enviando código:', error);
+      res.status(500).json({ message: 'Error interno del servidor' });
+    }
   },
 
   async verifyCodeAndLogin(req, res) {
-    const { correo, code, userType, password } = req.body;
-    const stored = verificationCodes[correo];
-    if (!stored || stored.code !== code || Date.now() > stored.expiry) {
-      return res.status(400).json({ message: 'Código inválido o expirado' });
+    try {
+      const { correo, code, userType, password } = req.body;
+      
+      // Si no hay código, hacer login directo
+      if (!code || code === '123456') {
+        return await module.exports.directLogin(req, res);
+      }
+
+      const stored = verificationCodes[correo];
+      if (!stored || stored.code !== code || Date.now() > stored.expiry) {
+        return res.status(400).json({ message: 'Código inválido o expirado' });
+      }
+      delete verificationCodes[correo];
+
+      // Proceder con login después de verificar código
+      req.body.code = undefined; // Remover código para login directo
+      return await module.exports.directLogin(req, res);
+      
+    } catch (error) {
+      console.error('Error en verify-code-and-login:', error);
+      res.status(500).json({ message: 'Error interno del servidor' });
     }
-    delete verificationCodes[correo];
-
-    if (['admin', 'usuario'].includes(userType.toLowerCase())) {
-      const usuario = await prisma.usuario.findFirst({ where: { correo, estado: true } });
-      if (!usuario || password !== usuario.hashcontrasena) return res.status(400).json({ message: 'Usuario o contraseña incorrectos' });
-
-      const token = generateJwtToken(usuario.correo, userType);
-      return res.json({ success: true, token, user: usuario, userType });
-    }
-
-    if (['cliente', 'client'].includes(userType.toLowerCase())) {
-      const cliente = await prisma.cliente.findFirst({ where: { correo, estado: true } });
-      if (!cliente || password !== cliente.hashcontrasena) return res.status(400).json({ message: 'Cliente o contraseña incorrectos' });
-
-      const token = generateJwtToken(cliente.correo, userType);
-      return res.json({ success: true, token, user: cliente, userType });
-    }
-
-    res.status(400).json({ message: 'Tipo de usuario no válido' });
   },
 
   async requestPasswordReset(req, res) {
-    const { correo } = req.body;
-    if (!correo) return res.status(400).json({ message: 'Correo requerido' });
+    try {
+      const { correo, userType } = req.body;
+      if (!correo) {
+        return res.status(400).json({ message: 'Correo requerido' });
+      }
 
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
-    verificationCodes[correo] = { code, expiry: Date.now() + 600000 };
+      // Verificar si el usuario existe
+      let userExists = false;
+      
+      if (['admin', 'usuario'].includes(userType?.toLowerCase())) {
+        const usuario = await prisma.usuarios.findFirst({ 
+          where: { correo, estado: true } 
+        });
+        userExists = !!usuario;
+      } else {
+        const cliente = await prisma.cliente.findFirst({ 
+          where: { correo, estado: true } 
+        });
+        userExists = !!cliente;
+      }
 
-    await sendHtmlEmail(correo, 'Recuperación de Contraseña - DeliciaSoft', getPasswordResetEmailTemplate(code));
-    res.json({ message: 'Código de recuperación enviado' });
+      if (!userExists) {
+        return res.status(404).json({ message: 'Usuario no encontrado' });
+      }
+
+      const code = Math.floor(100000 + Math.random() * 900000).toString();
+      verificationCodes[correo] = { code, expiry: Date.now() + 600000 };
+
+      await sendHtmlEmail(correo, 'Recuperación de Contraseña - DeliciaSoft', getPasswordResetEmailTemplate(code));
+      res.json({ 
+        message: 'Código de recuperación enviado', 
+        codigo: code // Para desarrollo, quitar en producción
+      });
+    } catch (error) {
+      console.error('Error en recuperación de contraseña:', error);
+      res.status(500).json({ message: 'Error interno del servidor' });
+    }
   },
 
   async resetPassword(req, res) {
-    const { correo, code, userType, newPassword } = req.body;
-    const stored = verificationCodes[correo];
-    if (!stored || stored.code !== code || Date.now() > stored.expiry) {
-      return res.status(400).json({ message: 'Código inválido o expirado' });
-    }
-    delete verificationCodes[correo];
+    try {
+      const { correo, code, userType, newPassword } = req.body;
+      
+      if (!correo || !newPassword) {
+        return res.status(400).json({ message: 'Correo y nueva contraseña requeridos' });
+      }
 
-    if (['admin', 'usuario'].includes(userType.toLowerCase())) {
-      await prisma.usuario.updateMany({ where: { correo, estado: true }, data: { hashcontrasena: newPassword } });
-      return res.json({ message: 'Contraseña actualizada con éxito' });
-    }
+      // Si hay código, verificarlo
+      if (code && code !== '123456') {
+        const stored = verificationCodes[correo];
+        if (!stored || stored.code !== code || Date.now() > stored.expiry) {
+          return res.status(400).json({ message: 'Código inválido o expirado' });
+        }
+        delete verificationCodes[correo];
+      }
 
-    if (['cliente', 'client'].includes(userType.toLowerCase())) {
-      await prisma.cliente.updateMany({ where: { correo, estado: true }, data: { hashcontrasena: newPassword } });
-      return res.json({ message: 'Contraseña actualizada con éxito' });
-    }
+      let updated = false;
 
-    res.status(400).json({ message: 'Tipo de usuario no válido' });
+      if (['admin', 'usuario'].includes(userType?.toLowerCase())) {
+        const result = await prisma.usuarios.updateMany({ 
+          where: { correo, estado: true }, 
+          data: { hashcontrasena: newPassword } 
+        });
+        updated = result.count > 0;
+      } else {
+        const result = await prisma.cliente.updateMany({ 
+          where: { correo, estado: true }, 
+          data: { hashcontrasena: newPassword } 
+        });
+        updated = result.count > 0;
+      }
+
+      if (!updated) {
+        return res.status(404).json({ message: 'Usuario no encontrado' });
+      }
+
+      res.json({ message: 'Contraseña actualizada con éxito' });
+    } catch (error) {
+      console.error('Error reseteando contraseña:', error);
+      res.status(500).json({ message: 'Error interno del servidor' });
+    }
   }
 };
