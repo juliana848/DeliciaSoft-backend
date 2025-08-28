@@ -29,26 +29,28 @@ exports.getById = async (req, res) => {
 exports.create = async (req, res) => {
   try {
     const {
-      tipoDocumento,
+      tipodocumento,
       documento,
-      nombreEmpresa,
-      nombreProveedor,
+      nombreempresa,
+      nombreproveedor,
       contacto,
       correo,
       direccion,
-      estado
+      estado,
+      TipoProveedor
     } = req.body;
 
     const nuevoProveedor = await prisma.proveedor.create({
       data: {
-        tipoDocumento,
+        tipodocumento,
         documento: documento ? parseInt(documento) : null,
-        nombreEmpresa,
-        nombreProveedor,
+        nombreempresa,
+        nombreproveedor,
         contacto: contacto ? parseInt(contacto) : null,
         correo,
         direccion,
-        estado
+        estado,
+        TipoProveedor
       }
     });
 
@@ -58,6 +60,7 @@ exports.create = async (req, res) => {
     res.status(500).json({ message: 'Error al crear proveedor', error: error.message });
   }
 };
+
 
 
 // Actualizar proveedor
