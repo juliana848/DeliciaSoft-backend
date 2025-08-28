@@ -12,6 +12,7 @@ exports.getAll = async (req, res) => {
       }
     });
 
+    
     const ventasTransformadas = ventas.map(v => ({
       idventa: v.idventa,
       fechaventa: v.fechaventa,
@@ -138,6 +139,6 @@ exports.remove = async (req, res) => {
     await prisma.venta.delete({ where: { idventa: id } });
     res.json({ message: 'Venta eliminada correctamente' });
   } catch (error) {
-    res.status(500).json({ message: 'Error al eliminar venta', error: error.message });
+    res.status(500).json({ message: 'Error al eliminar la venta', error: error.message });
   }
 };

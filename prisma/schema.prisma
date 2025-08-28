@@ -1,6 +1,6 @@
 generator client {
   provider = "prisma-client-js"
-  output   = "../node_modules/.prisma/client"
+  engineType = "binary"
 }
 
 datasource db {
@@ -325,24 +325,23 @@ model usuarios {
 }
 
 model venta {
-  idventa      Int            @id @default(autoincrement())
-  fechaventa   DateTime?      @db.Date
-  cliente      Int?
-  idsede       Int?
-  metodopago   String?        @db.VarChar(10)
-  tipoventa    String?        @db.VarChar(10)
-  total        Decimal?       @db.Decimal(10, 2)
-
-  estadoVentaId Int?          
-  estadoVenta   estadoventa?  @relation("VentaEstado", fields: [estadoVentaId], references: [idestadoventa])
+  idventa       Int            @id @default(autoincrement())
+  fechaventa    DateTime?      @db.Date
+  cliente       Int?
+  idsede        Int?
+  metodopago    String?        @db.VarChar(10)
+  tipoventa     String?        @db.VarChar(10)
+  total         Decimal?       @db.Decimal(10, 2)
+  estadoVentaId Int?
   detalleventa  detalleventa[]
   pedido        pedido[]
-  clienteData   cliente?      @relation("venta_clienteTocliente", fields: [cliente], references: [idcliente], onDelete: NoAction, onUpdate: NoAction)
-  sede          sede?         @relation(fields: [idsede], references: [idsede], onDelete: NoAction, onUpdate: NoAction)
+  clienteData   cliente?       @relation("venta_clienteTocliente", fields: [cliente], references: [idcliente], onDelete: NoAction, onUpdate: NoAction)
+  estadoVenta   estadoventa?   @relation("VentaEstado", fields: [estadoVentaId], references: [idestadoventa])
+  sede          sede?          @relation(fields: [idsede], references: [idsede], onDelete: NoAction, onUpdate: NoAction)
 }
 
 model estadoventa {
   idestadoventa Int     @id @default(autoincrement())
   nombre_estado String  @db.VarChar(50)
-  ventas venta[] @relation("VentaEstado")
+  ventas        venta[] @relation("VentaEstado")
 }
