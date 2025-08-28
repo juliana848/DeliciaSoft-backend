@@ -1,306 +1,144 @@
-// src/controllers/venta.controller.js
+const { PrismaClient } = require('@prisma/client');
+const prisma = new PrismaClient();
 
-const API_BASE_URL = 'https://deliciasoft-backend.onrender.com/api';
-
-class VentaApiService {
-  // Transforma los datos de snake_case a camelCase
-  transformarVentaDesdeAPI(ventaApi) {
-    if (!ventaApi) return null;
-    return {
-      idVenta: ventaApi.idventa,
-      fechaVenta: ventaApi.fechaventa,
-      idCliente: ventaApi.cliente,
-      idSede: ventaApi.idsede,
-      metodoPago: ventaApi.metodopago,
-      tipoVenta: ventaApi.tipoventa,
-      idEstadoVenta: ventaApi.idestadoventa,
-      total: parseFloat(ventaApi.total),
-    };
-  }
-
-  // Transforma el detalle de venta
-  transformarDetalleVentaDesdeAPI(detalleApi) {
-    if (!detalleApi) return [];
-    return detalleApi.map(item => ({
-      iddetalleventa: item.iddetalleventa,
-      idventa: item.idventa,
-      idproductogeneral: item.idproductogeneral,
-      cantidad: item.cantidad,
-      precioUnitario: parseFloat(item.preciounitario),
-      subtotal: parseFloat(item.subtotal),
-      iva: parseFloat(item.iva),
-    }));
-  }
-
-  // Transforma los abonos
-  transformarAbonosDesdeAPI(abonosApi) {
-    if (!abonosApi) return [];
-    return abonosApi.map(abono => ({
-      idAbono: abono.idabono,
-      idPedido: abono.idpedido,
-      metodoPago: abono.metodopago,
-      idImagen: abono.idimagen,
-      cantidadPagar: parseFloat(abono.cantidadpagar),
-    }));
-  }
-
-  // N U E V O S    S E R V I C I O S    D E    A P I
-  async obtenerClientes() {
-    try {
-      const response = await fetch(`${API_BASE_URL}/cliente`);
-      if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
-      return await response.json();
-    } catch (error) {
-      console.error('Error al obtener los clientes:', error);
-      throw new Error('No se pudo obtener la lista de clientes.');
-    }
-  }
-
-  async obtenerSedes() {
-    try {
-      const response = await fetch(`${API_BASE_URL}/sede`);
-      if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
-      return await response.json();
-    } catch (error) {
-      console.error('Error al obtener las sedes:', error);
-      throw new Error('No se pudo obtener la lista de sedes.');
-    }
-  }
-
-  async obtenerProductos() {
-    try {
-      const response = await fetch(`${API_BASE_URL}/productogeneral`);
-      if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
-      return await response.json();
-    } catch (error) {
-      console.error('Error al obtener los productos:', error);
-      throw new Error('No se pudo obtener la lista de productos.');
-    }
-  }
-
-  async obtenerEstadosVenta() {
-    try {
-      const response = await fetch(`${API_BASE_URL}/estadoventa`);
-      if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
-      return await response.json();
-    } catch (error) {
-      console.error('Error al obtener los estados de venta:', error);
-      throw new Error('No se pudo obtener la lista de estados de venta.');
-    }
-  }
-
-  // F U N C I O N E S    A C T U A L I Z A D A S
-  async obtenerVentas() {
-    let estadosVenta = [];
-    let clientes = [];
-    let sedes = [];
-
-    try {
-      [estadosVenta, clientes, sedes] = await Promise.all([
-        this.obtenerEstadosVenta(),
-        this.obtenerClientes(),
-        this.obtenerSedes()
-      ]);
-    } catch (error) {
-      console.error('No se pudieron cargar datos de referencia.');
-    }
-
-    try {
-      const response = await fetch(`${API_BASE_URL}/venta`);
-      if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
-      const data = await response.json();
-      return data.map(venta => {
-        const ventaTransformada = this.transformarVentaDesdeAPI(venta);
-        const cliente = clientes.find(c => c.idcliente === ventaTransformada.idCliente);
-        const sede = sedes.find(s => s.idsede === ventaTransformada.idSede);
-        const estado = estadosVenta.find(e => e.idestadoventa === ventaTransformada.idEstadoVenta);
-
-        return {
-          ...ventaTransformada,
-          nombreCliente: cliente ? cliente.nombre_cliente : `Cliente ${ventaTransformada.idCliente}`,
-          nombreSede: sede ? sede.nombre_sede : `Sede ${ventaTransformada.idSede}`,
-          nombreEstado: estado ? estado.nombre_estado : 'Desconocido'
-        };
-      });
-    } catch (error) {
-      console.error('Error al obtener ventas:', error);
-      throw new Error('No se pudo obtener la lista de ventas.');
-    }
-  }
-
-  async obtenerVentaPorId(id) {
-    let estadosVenta = [];
-    let clientes = [];
-    let sedes = [];
-    let productos = [];
-
-    try {
-      [estadosVenta, clientes, sedes, productos] = await Promise.all([
-        this.obtenerEstadosVenta(),
-        this.obtenerClientes(),
-        this.obtenerSedes(),
-        this.obtenerProductos()
-      ]);
-    } catch (error) {
-      console.error('No se pudieron cargar datos de referencia para el detalle.');
-    }
-
-    try {
-      const [responseVenta, responseDetalle] = await Promise.all([
-        fetch(`${API_BASE_URL}/venta/${id}`),
-        fetch(`${API_BASE_URL}/detalleventa?idventa=${id}`),
-      ]);
-
-      if (!responseVenta.ok) {
-        if (responseVenta.status === 404) {
-          throw new Error('Venta no encontrada. El ID de la venta no existe en la base de datos.');
-        }
-        throw new Error(`HTTP error! Status: ${responseVenta.status}`);
+exports.getAll = async (req, res) => {
+  try {
+    const ventas = await prisma.venta.findMany({
+      include: {
+        detalleventa: { select: { iddetalleventa: true } },
+        clienteData: { select: { idcliente: true } },
+        sede: { select: { idsede: true } },
+        estadoVenta: { select: { idestadoventa: true } }
       }
+    });
 
-      const ventaData = await responseVenta.json();
-      const detalleData = await responseDetalle.json();
+    
+    const ventasTransformadas = ventas.map(v => ({
+      idventa: v.idventa,
+      fechaventa: v.fechaventa,
+      total: v.total,
+      metodopago: v.metodopago,
+      tipoventa: v.tipoventa,
+      detalleventa: v.detalleventa.map(d => d.iddetalleventa), // array simple de IDs
+      cliente: v.clienteData ? v.clienteData.idcliente : null, // número directo
+      sede: v.sede ? v.sede.idsede : null, // número directo
+      estadoVenta: v.estadoVenta ? v.estadoVenta.idestadoventa : null // número directo
+    }));
 
-      // Obtener los abonos por separado, ya que el controlador de venta no los trae directamente
-      const responseAbonos = await fetch(`${API_BASE_URL}/abonos?idpedido=${id}`);
-      const abonosData = await responseAbonos.json();
-
-      const ventaTransformada = this.transformarVentaDesdeAPI(ventaData);
-      const detalleTransformado = this.transformarDetalleVentaDesdeAPI(detalleData);
-      const abonosTransformados = this.transformarAbonosDesdeAPI(abonosData);
-
-      const cliente = clientes.find(c => c.idcliente === ventaTransformada.idCliente);
-      const sede = sedes.find(s => s.idsede === ventaTransformada.idSede);
-      const estado = estadosVenta.find(e => e.idestadoventa === ventaTransformada.idEstadoVenta);
-
-      return {
-        ...ventaTransformada,
-        nombreCliente: cliente ? cliente.nombre_cliente : `Cliente ${ventaTransformada.idCliente}`,
-        nombreSede: sede ? sede.nombre_sede : `Sede ${ventaTransformada.idSede}`,
-        nombreEstado: estado ? estado.nombre_estado : 'Desconocido',
-        detalleVenta: detalleTransformado.map(item => {
-          const producto = productos.find(p => p.idproductogeneral === item.idproductogeneral);
-          return {
-            ...item,
-            nombreProducto: producto ? producto.nombre_producto : `Producto ${item.idproductogeneral}`
-          };
-        }),
-        abonos: abonosTransformados,
-      };
-
-    } catch (error) {
-      console.error('Error al obtener venta:', error);
-      throw new Error(`Error al obtener venta: ${error.message}`);
-    }
-  }
-
-  async crearVenta(ventaData) {
-    try {
-      const response = await fetch(`${API_BASE_URL}/venta`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(ventaData),
-      });
-      if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
-      const nuevaVenta = await response.json();
-      return this.transformarVentaDesdeAPI(nuevaVenta);
-    } catch (error) {
-      console.error('Error al crear venta:', error);
-      throw new Error('No se pudo crear la venta.');
-    }
-  }
-
-  async anularVenta(id) {
-    try {
-        const response = await fetch(`${API_BASE_URL}/venta/${id}/estado`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ idestadoventa: 2 }),
-        });
-        if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
-        return await response.json();
-    } catch (error) {
-        console.error('Error al anular la venta:', error);
-        throw new Error('No se pudo anular la venta.');
-    }
-  }
-
-  async actualizarEstadoVenta(idVenta, nuevoEstadoId) {
-    try {
-        const response = await fetch(`${API_BASE_URL}/venta/${idVenta}/estado`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ idestadoventa: nuevoEstadoId }),
-        });
-        if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
-        return await response.json();
-    } catch (error) {
-        console.error('Error al actualizar el estado de la venta:', error);
-        throw new Error('No se pudo actualizar el estado de la venta.');
-    }
-  }
-
-  async agregarAbono(abonoData) {
-    try {
-      const response = await fetch(`${API_BASE_URL}/abonos`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(abonoData),
-      });
-      if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
-      return await response.json();
-    } catch (error) {
-      console.error('Error al agregar abono:', error);
-      throw new Error('No se pudo agregar el abono.');
-    }
-  }
-}
-
-// Creamos una única instancia del servicio
-const ventaService = new VentaApiService();
-
-// Las funciones del controlador que se exportan y usan en las rutas
-const getAll = async (req, res) => {
-  try {
-    const ventas = await ventaService.obtenerVentas();
-    res.json(ventas);
+    res.json(ventasTransformadas);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ message: 'Error al obtener ventas', error: error.message });
   }
 };
 
-const getById = async (req, res) => {
+exports.getById = async (req, res) => {
   try {
-    const { id } = req.params;
-    const venta = await ventaService.obtenerVentaPorId(id);
-    res.json(venta);
+    const id = parseInt(req.params.id);
+    const venta = await prisma.venta.findUnique({
+      where: { idventa: id },
+      include: {
+        detalleventa: { select: { iddetalle: true } },
+        clienteData: { select: { idcliente: true } },
+        sede: { select: { idsede: true } },
+        estadoVenta: { select: { idestadoventa: true } }
+      }
+    });
+
+    if (!venta) return res.status(404).json({ message: 'Venta no encontrada' });
+
+    const ventaTransformada = {
+      idventa: venta.idventa,
+      fechaventa: venta.fechaventa,
+      total: venta.total,
+      metodopago: venta.metodopago,
+      tipoventa: venta.tipoventa,
+      detalleventa: venta.detalleventa.map(d => d.iddetalle),
+      cliente: venta.clienteData ? { id: venta.clienteData.idcliente } : null,
+      sede: venta.sede ? { id: venta.sede.idsede } : null,
+      estadoVenta: venta.estadoVenta ? { id: venta.estadoVenta.idestadoventa } : null
+    };
+
+    res.json(ventaTransformada);
   } catch (error) {
-    res.status(404).json({ error: error.message });
+    res.status(500).json({ message: 'Error al obtener venta', error: error.message });
   }
 };
 
-const create = async (req, res) => {
+exports.create = async (req, res) => {
   try {
-    const nuevaVenta = await ventaService.crearVenta(req.body);
+    const {
+      fechaventa,
+      cliente,
+      idsede,
+      metodopago,
+      tipoventa,
+      estadoVentaId,
+      total
+    } = req.body;
+
+    const nuevaVenta = await prisma.venta.create({
+      data: {
+        fechaventa,
+        cliente,
+        idsede,
+        metodopago,
+        tipoventa,
+        total,
+        estadoVentaId
+      }
+    });
+
     res.status(201).json(nuevaVenta);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ message: 'Error al crear venta', error: error.message });
   }
 };
 
-const update = async (req, res) => {
-  res.status(501).json({ message: "Update function not implemented yet." });
+exports.update = async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const {
+      fechaventa,
+      cliente,
+      idsede,
+      metodopago,
+      tipoventa,
+      estadoVentaId,
+      total
+    } = req.body;
+
+    const ventaExiste = await prisma.venta.findUnique({ where: { idventa: id } });
+    if (!ventaExiste) return res.status(404).json({ message: 'Venta no encontrada' });
+
+    const ventaActualizada = await prisma.venta.update({
+      where: { idventa: id },
+      data: {
+        fechaventa,
+        cliente,
+        idsede,
+        metodopago,
+        tipoventa,
+        total,
+        estadoVentaId
+      }
+    });
+
+    res.json(ventaActualizada);
+  } catch (error) {
+    res.status(500).json({ message: 'Error al actualizar venta', error: error.message });
+  }
 };
 
-const remove = async (req, res) => {
-  res.status(501).json({ message: "Remove function not implemented yet." });
-};
+exports.remove = async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
 
-// Exportamos las funciones del controlador
-module.exports = {
-  getAll,
-  getById,
-  create,
-  update,
-  remove,
+    const ventaExiste = await prisma.venta.findUnique({ where: { idventa: id } });
+    if (!ventaExiste) return res.status(404).json({ message: 'Venta no encontrada' });
+
+    await prisma.venta.delete({ where: { idventa: id } });
+    res.json({ message: 'Venta eliminada correctamente' });
+  } catch (error) {
+    res.status(500).json({ message: 'Error al eliminar la venta', error: error.message });
+  }
 };
