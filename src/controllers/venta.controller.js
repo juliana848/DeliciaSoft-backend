@@ -63,12 +63,11 @@ exports.getById = async (req, res) => {
     res.status(500).json({ message: 'Error al obtener venta', error: error.message });
   }
 };
-
 exports.create = async (req, res) => {
   try {
     const {
       fechaventa,
-      cliente,
+      cliente, // Este es el ID del cliente
       idsede,
       metodopago,
       tipoventa,
@@ -78,16 +77,16 @@ exports.create = async (req, res) => {
 
     const nuevaVenta = await prisma.venta.create({
       data: {
-        fechaventa,
-        cliente,
+        fechaventa: fechaventa ? new Date(fechaventa) : null,
+        cliente: cliente ? { connect: { idcliente: cliente } } : undefined, // Uso de connect
         idsede,
         metodopago,
         tipoventa,
         total,
-        estadoVentaId
-      }
+        estadoVentaId,
+        estadoVenta: estadoVentaId ? { connect: { idestadoventa: estadoVentaId } } : undefined, // Uso de connect
+      },
     });
-
     res.status(201).json(nuevaVenta);
   } catch (error) {
     res.status(500).json({ message: 'Error al crear venta', error: error.message });
@@ -99,7 +98,7 @@ exports.update = async (req, res) => {
     const id = parseInt(req.params.id);
     const {
       fechaventa,
-      cliente,
+      cliente, // Este es el ID del cliente
       idsede,
       metodopago,
       tipoventa,
@@ -113,14 +112,15 @@ exports.update = async (req, res) => {
     const ventaActualizada = await prisma.venta.update({
       where: { idventa: id },
       data: {
-        fechaventa,
-        cliente,
+        fechaventa: fechaventa ? new Date(fechaventa) : undefined,
+        cliente: cliente ? { connect: { idcliente: cliente } } : undefined,
         idsede,
         metodopago,
         tipoventa,
         total,
-        estadoVentaId
-      }
+        estadoVentaId,
+        estadoVenta: estadoVentaId ? { connect: { idestadoventa: estadoVentaId } } : undefined,
+      },
     });
 
     res.json(ventaActualizada);
@@ -128,7 +128,6 @@ exports.update = async (req, res) => {
     res.status(500).json({ message: 'Error al actualizar venta', error: error.message });
   }
 };
-
 exports.remove = async (req, res) => {
   try {
     const id = parseInt(req.params.id);
