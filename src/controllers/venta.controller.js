@@ -76,33 +76,31 @@ exports.create = async (req, res) => {
       detalleventa
     } = req.body;
 
-    const nuevaVenta = await prisma.venta.create({
-      data: {
-        fechaventa,
-        metodopago,
-        tipoventa,
-        total,
-        clienteData: cliente ? { connect: { idcliente: cliente } } : undefined,
-        sede: idsede ? { connect: { idsede } } : undefined,
-        estadoVenta: estadoVentaId ? { connect: { idestadoventa: estadoVentaId } } : undefined,
-        detalleventa: detalleventa && detalleventa.length > 0
-          ? { connect: detalleventa.map(id => ({ iddetalleventa: id })) }
-          : undefined
-      },
-      include: {
-        clienteData: true,
-        sede: true,
-        estadoVenta: true,
-        detalleventa: true
-      }
-    });
-
+const nuevaVenta = await prisma.venta.create({
+  data: {
+    fechaventa,
+    metodopago,
+    tipoventa,
+    total,
+    clienteData: cliente ? { connect: { idcliente: cliente } } : undefined,
+    sede: idsede ? { connect: { idsede: idsede } } : undefined,
+    estadoVenta: estadoVentaId ? { connect: { idestadoventa: estadoVentaId } } : undefined,
+    detalleventa: detalleventa && detalleventa.length > 0
+      ? { connect: detalleventa.map(id => ({ iddetalleventa: id })) }
+      : undefined
+  },
+  include: {
+    clienteData: true,
+    sede: true,
+    estadoVenta: true,
+    detalleventa: true
+  }
+});
     res.status(201).json(nuevaVenta);
   } catch (error) {
     res.status(500).json({ message: 'Error al crear venta', error: error.message });
   }
 };
-
 exports.update = async (req, res) => {
   try {
     const id = parseInt(req.params.id);
@@ -128,7 +126,7 @@ exports.update = async (req, res) => {
         tipoventa,
         total,
         clienteData: cliente ? { connect: { idcliente: cliente } } : undefined,
-        sede: idsede ? { connect: { idsede } } : undefined,
+        sede: idsede ? { connect: { idsede: idsede } } : undefined,
         estadoVenta: estadoVentaId ? { connect: { idestadoventa: estadoVentaId } } : undefined,
         detalleventa: detalleventa && detalleventa.length > 0
           ? { set: detalleventa.map(id => ({ iddetalleventa: id })) }
@@ -147,6 +145,7 @@ exports.update = async (req, res) => {
     res.status(500).json({ message: 'Error al actualizar venta', error: error.message });
   }
 };
+
 
 exports.remove = async (req, res) => {
   try {
