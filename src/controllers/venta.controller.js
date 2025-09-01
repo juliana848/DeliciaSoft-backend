@@ -23,7 +23,6 @@ exports.getAll = async (req, res) => {
       cliente: v.clienteData ? v.clienteData.idcliente : null, // número directo
       sede: v.sede ? v.sede.idsede : null, // número directo
       estadoVenta: v.estadoVenta ? v.estadoVenta.idestadoventa : null // número directo
-
     }));
 
     res.json(ventasTransformadas);

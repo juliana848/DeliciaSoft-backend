@@ -3,7 +3,7 @@ const router = express.Router();
 const controller = require('../controllers/venta.controller');
 
 router.get('/listado-ventas-resumen', controller.getListadoResumen); // NUEVA RUTA
-router.get('/:id/detalles', controller.getDetailsById); // Corregido: ruta para ver el detalle de la venta
+router.get('/:id/detalles', controller.getDetailsById); // NUEVA RUTA
 router.get('/', controller.getAll);
 router.get('/:id', controller.getById);
 router.post('/', controller.create);
