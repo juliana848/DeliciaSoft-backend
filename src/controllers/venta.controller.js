@@ -31,7 +31,7 @@ exports.getAll = async (req, res) => {
   }
 };
 
-// NUEVA FUNCION PARA EL LISTADO RESUMEN
+// NUEVA FUNCION para obtener el listado resumen de ventas
 exports.getListadoResumen = async (req, res) => {
     try {
         const ventas = await prisma.venta.findMany({
@@ -80,7 +80,7 @@ exports.getListadoResumen = async (req, res) => {
     }
 };
 
-// NUEVA FUNCION PARA EL DETALLE DE VENTA
+// FUNCION para obtener el detalle completo de una venta
 exports.getDetailsById = async (req, res) => {
     try {
         const id = parseInt(req.params.id);
