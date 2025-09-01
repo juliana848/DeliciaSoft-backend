@@ -1,6 +1,7 @@
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
+// Obtener todas las ventas
 exports.getAll = async (req, res) => {
   try {
     const ventas = await prisma.venta.findMany({
@@ -8,7 +9,7 @@ exports.getAll = async (req, res) => {
         detalleventa: { select: { iddetalleventa: true } },
         clienteData: { select: { idcliente: true } },
         sede: { select: { idsede: true } },
-        estadoVenta: { select: { idestadoventa: true } }
+        estadoVenta: { select: { idestadoventa: true, nombre: true } }
       }
     });
 
@@ -21,7 +22,9 @@ exports.getAll = async (req, res) => {
       detalleventa: v.detalleventa.map(d => d.iddetalleventa),
       cliente: v.clienteData ? v.clienteData.idcliente : null,
       sede: v.sede ? v.sede.idsede : null,
-      estadoVenta: v.estadoVenta ? v.estadoVenta.idestadoventa : null
+      estadoVenta: v.estadoVenta
+        ? { id: v.estadoVenta.idestadoventa, nombre: v.estadoVenta.nombre }
+        : null
     }));
 
     res.json(ventasTransformadas);
@@ -30,6 +33,7 @@ exports.getAll = async (req, res) => {
   }
 };
 
+// Obtener una venta por ID
 exports.getById = async (req, res) => {
   try {
     const id = parseInt(req.params.id);
@@ -39,7 +43,7 @@ exports.getById = async (req, res) => {
         detalleventa: { select: { iddetalleventa: true } },
         clienteData: { select: { idcliente: true } },
         sede: { select: { idsede: true } },
-        estadoVenta: { select: { idestadoventa: true } }
+        estadoVenta: { select: { idestadoventa: true, nombre: true } }
       }
     });
 
@@ -54,7 +58,9 @@ exports.getById = async (req, res) => {
       detalleventa: venta.detalleventa.map(d => d.iddetalleventa),
       cliente: venta.clienteData ? venta.clienteData.idcliente : null,
       sede: venta.sede ? venta.sede.idsede : null,
-      estadoVenta: venta.estadoVenta ? venta.estadoVenta.idestadoventa : null
+      estadoVenta: venta.estadoVenta
+        ? { id: venta.estadoVenta.idestadoventa, nombre: venta.estadoVenta.nombre }
+        : null
     };
 
     res.json(ventaTransformada);
@@ -63,9 +69,10 @@ exports.getById = async (req, res) => {
   }
 };
 
+// Crear una venta
 exports.create = async (req, res) => {
   try {
-    const { fechaventa, cliente, idsede, metodopago, tipoventa, estadoVentaId, total } = req.body;
+    const { fechaventa, cliente, idsede, metodopago, tipoventa, estadoVentaId, total, detalleventa } = req.body;
 
     const nuevaVenta = await prisma.venta.create({
       data: {
@@ -75,12 +82,16 @@ exports.create = async (req, res) => {
         total,
         clienteData: cliente ? { connect: { idcliente: cliente } } : undefined,
         sede: idsede ? { connect: { idsede: idsede } } : undefined,
-        estadoVenta: estadoVentaId ? { connect: { idestadoventa: estadoVentaId } } : undefined
+        estadoVenta: estadoVentaId ? { connect: { idestadoventa: estadoVentaId } } : undefined,
+        detalleventa: detalleventa && detalleventa.length > 0
+          ? { connect: detalleventa.map(id => ({ iddetalleventa: id })) }
+          : undefined
       },
       include: {
         clienteData: true,
         sede: true,
-        estadoVenta: true
+        estadoVenta: true,
+        detalleventa: true
       }
     });
 
@@ -90,10 +101,11 @@ exports.create = async (req, res) => {
   }
 };
 
+// Actualizar una venta
 exports.update = async (req, res) => {
   try {
     const id = parseInt(req.params.id);
-    const { fechaventa, cliente, idsede, metodopago, tipoventa, estadoVentaId, total } = req.body;
+    const { fechaventa, cliente, idsede, metodopago, tipoventa, estadoVentaId, total, detalleventa } = req.body;
 
     const ventaExiste = await prisma.venta.findUnique({ where: { idventa: id } });
     if (!ventaExiste) return res.status(404).json({ message: 'Venta no encontrada' });
@@ -107,12 +119,16 @@ exports.update = async (req, res) => {
         total,
         clienteData: cliente ? { connect: { idcliente: cliente } } : undefined,
         sede: idsede ? { connect: { idsede: idsede } } : undefined,
-        estadoVenta: estadoVentaId ? { connect: { idestadoventa: estadoVentaId } } : undefined
+        estadoVenta: estadoVentaId ? { connect: { idestadoventa: estadoVentaId } } : undefined,
+        detalleventa: detalleventa && detalleventa.length > 0
+          ? { set: detalleventa.map(id => ({ iddetalleventa: id })) }
+          : undefined
       },
       include: {
         clienteData: true,
         sede: true,
-        estadoVenta: true
+        estadoVenta: true,
+        detalleventa: true
       }
     });
 
@@ -122,6 +138,38 @@ exports.update = async (req, res) => {
   }
 };
 
+// Cambiar solo el estado de una venta
+exports.updateEstado = async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const { estadoVentaId } = req.body;
+
+    const ventaExiste = await prisma.venta.findUnique({ where: { idventa: id } });
+    if (!ventaExiste) return res.status(404).json({ message: "Venta no encontrada" });
+
+    const ventaActualizada = await prisma.venta.update({
+      where: { idventa: id },
+      data: {
+        estadoVenta: estadoVentaId
+          ? { connect: { idestadoventa: estadoVentaId } }
+          : undefined
+      },
+      include: {
+        estadoVenta: true
+      }
+    });
+
+    res.json({
+      message: "Estado actualizado correctamente",
+      idventa: ventaActualizada.idventa,
+      estadoVenta: ventaActualizada.estadoVenta
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Error al actualizar estado de la venta", error: error.message });
+  }
+};
+
+// Eliminar una venta
 exports.remove = async (req, res) => {
   try {
     const id = parseInt(req.params.id);
