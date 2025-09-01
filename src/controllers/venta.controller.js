@@ -65,35 +65,55 @@ exports.getById = async (req, res) => {
 
 exports.create = async (req, res) => {
   try {
-    const { fechaventa, cliente, idsede, metodopago, tipoventa, estadoVentaId, total } = req.body;
+    const {
+      fechaventa,
+      cliente,
+      idsede,
+      metodopago,
+      tipoventa,
+      estadoVentaId,
+      total,
+      detalleventa
+    } = req.body;
 
-    const nuevaVenta = await prisma.venta.create({
-      data: {
-        fechaventa,
-        metodopago,
-        tipoventa,
-        total,
-        clienteData: cliente ? { connect: { idcliente: cliente } } : undefined,
-        sede: idsede ? { connect: { idsede: idsede } } : undefined,
-        estadoVenta: estadoVentaId ? { connect: { idestadoventa: estadoVentaId } } : undefined
-      },
-      include: {
-        clienteData: true,
-        sede: true,
-        estadoVenta: true
-      }
-    });
-
+const nuevaVenta = await prisma.venta.create({
+  data: {
+    fechaventa,
+    metodopago,
+    tipoventa,
+    total,
+    clienteData: cliente ? { connect: { idcliente: cliente } } : undefined,
+    sede: idsede ? { connect: { idsede: idsede } } : undefined,
+    estadoVenta: estadoVentaId ? { connect: { idestadoventa: estadoVentaId } } : undefined,
+    detalleventa: detalleventa && detalleventa.length > 0
+      ? { connect: detalleventa.map(id => ({ iddetalleventa: id })) }
+      : undefined
+  },
+  include: {
+    clienteData: true,
+    sede: true,
+    estadoVenta: true,
+    detalleventa: true
+  }
+});
     res.status(201).json(nuevaVenta);
   } catch (error) {
     res.status(500).json({ message: 'Error al crear venta', error: error.message });
   }
 };
-
 exports.update = async (req, res) => {
   try {
     const id = parseInt(req.params.id);
-    const { fechaventa, cliente, idsede, metodopago, tipoventa, estadoVentaId, total } = req.body;
+    const {
+      fechaventa,
+      cliente,
+      idsede,
+      metodopago,
+      tipoventa,
+      estadoVentaId,
+      total,
+      detalleventa
+    } = req.body;
 
     const ventaExiste = await prisma.venta.findUnique({ where: { idventa: id } });
     if (!ventaExiste) return res.status(404).json({ message: 'Venta no encontrada' });
@@ -107,12 +127,16 @@ exports.update = async (req, res) => {
         total,
         clienteData: cliente ? { connect: { idcliente: cliente } } : undefined,
         sede: idsede ? { connect: { idsede: idsede } } : undefined,
-        estadoVenta: estadoVentaId ? { connect: { idestadoventa: estadoVentaId } } : undefined
+        estadoVenta: estadoVentaId ? { connect: { idestadoventa: estadoVentaId } } : undefined,
+        detalleventa: detalleventa && detalleventa.length > 0
+          ? { set: detalleventa.map(id => ({ iddetalleventa: id })) }
+          : undefined
       },
       include: {
         clienteData: true,
         sede: true,
-        estadoVenta: true
+        estadoVenta: true,
+        detalleventa: true
       }
     });
 
@@ -121,6 +145,7 @@ exports.update = async (req, res) => {
     res.status(500).json({ message: 'Error al actualizar venta', error: error.message });
   }
 };
+
 
 exports.remove = async (req, res) => {
   try {
