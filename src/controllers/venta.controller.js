@@ -159,3 +159,37 @@ exports.create = async (req, res) => {
     res.status(500).json({ message: 'Error al crear venta', error: error.message });
   }
 };
+
+exports.getById = async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const venta = await prisma.venta.findUnique({ where: { idventa: id } });
+    if (!venta) return res.status(404).json({ message: 'Venta no encontrada' });
+    res.json(venta);
+  } catch (error) {
+    res.status(500).json({ message: 'Error al obtener venta', error: error.message });
+  }
+};
+
+exports.update = async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const updated = await prisma.venta.update({
+      where: { idventa: id },
+      data: req.body
+    });
+    res.json(updated);
+  } catch (error) {
+    res.status(500).json({ message: 'Error al actualizar venta', error: error.message });
+  }
+};
+
+exports.remove = async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    await prisma.venta.delete({ where: { idventa: id } });
+    res.json({ message: 'Venta eliminada correctamente' });
+  } catch (error) {
+    res.status(500).json({ message: 'Error al eliminar venta', error: error.message });
+  }
+};
