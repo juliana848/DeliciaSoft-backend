@@ -1,15 +1,17 @@
 const express = require('express');
 const router = express.Router();
-const controller = require('../controllers/venta.controller');
+const ventaController = require('../controllers/venta.controller');
 
-router.get('/listado-ventas-resumen', controller.getListadoResumen);
-router.get('/:id/detalles', controller.getDetailsById);
+router.get('/listado-resumen', ventaController.getListadoResumen);
 
+router.get('/:id/detalles', ventaController.getDetailsById);
 
-router.get('/', controller.getAll);
-router.get('/:id', controller.getById);
-router.post('/', controller.create);
-router.put('/:id', controller.update);
-router.delete('/:id', controller.remove);
+// Rutas CRUD básicas
+router.get('/', ventaController.getAll);           
+router.post('/', ventaController.create);          
+router.get('/:id', ventaController.getById);       
+router.patch('/:id', ventaController.update);      
+router.put('/:id', ventaController.update);       
+router.delete('/:id', ventaController.remove);    
 
 module.exports = router;

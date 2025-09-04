@@ -30,9 +30,11 @@ exports.getAll = async (req, res) => {
   }
 };
 
-// NUEVA FUNCION para obtener el listado resumen de ventas
+// FUNCIÓN PRINCIPAL PARA LISTADO - NO REQUIERE ID
 exports.getListadoResumen = async (req, res) => {
     try {
+        console.log('Obteniendo listado resumen de ventas...');
+        
         const ventas = await prisma.venta.findMany({
             select: {
                 idventa: true,
@@ -57,49 +59,86 @@ exports.getListadoResumen = async (req, res) => {
                         nombre_estado: true
                     }
                 }
+            },
+            orderBy: {
+                idventa: 'desc'
             }
         });
 
         const ventasTransformadas = ventas.map(venta => ({
             idventa: venta.idventa,
             fechaventa: venta.fechaventa,
-            total: parseFloat(venta.total),
-            metodopago: venta.metodopago,
-            tipoventa: venta.tipoventa,
+            total: parseFloat(venta.total || 0),
+            metodopago: venta.metodopago || '',
+            tipoventa: venta.tipoventa || '',
             idestadoventa: venta.estadoVentaId,
-            nombreEstado: venta.estadoVenta?.nombre_estado || 'N/A',
-            nombreCliente: venta.clienteData ? `${venta.clienteData.nombre} ${venta.clienteData.apellido}` : 'N/A',
-            nombreSede: venta.sede?.nombre || 'N/A'
+            nombreEstado: venta.estadoVenta?.nombre_estado || 'Sin Estado',
+            nombreCliente: venta.clienteData ? `${venta.clienteData.nombre} ${venta.clienteData.apellido}`.trim() : 'Cliente Genérico',
+            nombreSede: venta.sede?.nombre || 'Sin Sede'
         }));
 
+        console.log(`Encontradas ${ventasTransformadas.length} ventas`);
         res.json(ventasTransformadas);
+
     } catch (error) {
         console.error('Error en getListadoResumen:', error);
-        res.status(500).json({ message: 'Error al obtener el listado de ventas.', error: error.message });
+        res.status(500).json({ 
+            message: 'Error al obtener el listado de ventas.', 
+            error: error.message,
+            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+        });
     }
 };
 
-// FUNCION para obtener el detalle completo de una venta
+// FUNCIÓN PARA OBTENER DETALLE POR ID - SÍ REQUIERE ID VÁLIDO
 exports.getDetailsById = async (req, res) => {
     try {
         const id = parseInt(req.params.id);
         
-        if (isNaN(id)) {
+        if (isNaN(id) || id <= 0) {
             return res.status(400).json({ message: 'ID de venta inválido' });
         }
+
+        console.log(`Obteniendo detalle de venta ID: ${id}`);
 
         const venta = await prisma.venta.findUnique({
             where: { idventa: id },
             include: {
-                clienteData: true,
-                sede: true,
-                estadoVenta: true,
+                clienteData: {
+                    select: {
+                        nombre: true,
+                        apellido: true,
+                        telefono: true
+                    }
+                },
+                sede: {
+                    select: {
+                        nombre: true,
+                        direccion: true
+                    }
+                },
+                estadoVenta: {
+                    select: {
+                        idestadoventa: true,
+                        nombre_estado: true
+                    }
+                },
                 detalleventa: {
                     include: {
-                        productogeneral: true,
+                        productogeneral: {
+                            select: {
+                                nombre: true,
+                                precio: true
+                            }
+                        },
                         detalleadiciones: {
                             include: {
-                                catalogoadiciones: true
+                                catalogoadiciones: {
+                                    select: {
+                                        nombre: true,
+                                        precio: true
+                                    }
+                                }
                             }
                         }
                     }
@@ -111,22 +150,30 @@ exports.getDetailsById = async (req, res) => {
             return res.status(404).json({ message: 'Venta no encontrada.' });
         }
 
+        console.log(`Detalle de venta ${id} encontrado`);
         res.json(venta);
+
     } catch (error) {
         console.error('Error en getDetailsById:', error);
-        res.status(500).json({ message: 'Error al obtener el detalle de la venta.', error: error.message });
+        res.status(500).json({ 
+            message: 'Error al obtener el detalle de la venta.', 
+            error: error.message,
+            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+        });
     }
 };
 
 exports.create = async (req, res) => {
   try {
+    console.log('Creando nueva venta:', req.body);
+    
     const {
       fechaventa,
       cliente,
       idsede,
       metodopago,
       tipoventa,
-      estadoVentaId,
+      estadoVentaId = 1, // Default a estado activo
       total,
       detalleventa
     } = req.body;
@@ -146,22 +193,34 @@ exports.create = async (req, res) => {
           }
         }
       },
+      include: {
+        detalleventa: true
+      }
     });
+
+    console.log('Venta creada con ID:', nuevaVenta.idventa);
     res.status(201).json(nuevaVenta);
+
   } catch (error) {
-    res.status(500).json({ message: 'Error al crear venta', error: error.message });
+    console.error('Error al crear venta:', error);
+    res.status(500).json({ 
+      message: 'Error al crear venta', 
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 };
 
-// CORRECCION PRINCIPAL: getById con validación de ID
+// getById PARA USO INDIVIDUAL - REQUIERE ID
 exports.getById = async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     
-    // Validar que el ID sea un número válido
-    if (isNaN(id)) {
+    if (isNaN(id) || id <= 0) {
       return res.status(400).json({ message: 'ID de venta inválido' });
     }
+
+    console.log(`Obteniendo venta por ID: ${id}`);
 
     const venta = await prisma.venta.findUnique({ 
       where: { idventa: id },
@@ -190,10 +249,16 @@ exports.getById = async (req, res) => {
       return res.status(404).json({ message: 'Venta no encontrada' });
     }
     
+    console.log(`Venta ${id} encontrada`);
     res.json(venta);
+
   } catch (error) {
     console.error('Error en getById:', error);
-    res.status(500).json({ message: 'Error al obtener venta', error: error.message });
+    res.status(500).json({ 
+      message: 'Error al obtener venta', 
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 };
 
@@ -201,17 +266,38 @@ exports.update = async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     
-    if (isNaN(id)) {
+    if (isNaN(id) || id <= 0) {
       return res.status(400).json({ message: 'ID de venta inválido' });
+    }
+
+    console.log(`Actualizando venta ${id}:`, req.body);
+
+    const ventaExiste = await prisma.venta.findUnique({
+      where: { idventa: id }
+    });
+
+    if (!ventaExiste) {
+      return res.status(404).json({ message: 'Venta no encontrada' });
     }
 
     const updated = await prisma.venta.update({
       where: { idventa: id },
-      data: req.body
+      data: req.body,
+      include: {
+        estadoVenta: true
+      }
     });
+
+    console.log(`Venta ${id} actualizada`);
     res.json(updated);
+
   } catch (error) {
-    res.status(500).json({ message: 'Error al actualizar venta', error: error.message });
+    console.error('Error al actualizar venta:', error);
+    res.status(500).json({ 
+      message: 'Error al actualizar venta', 
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 };
 
@@ -219,13 +305,33 @@ exports.remove = async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     
-    if (isNaN(id)) {
+    if (isNaN(id) || id <= 0) {
       return res.status(400).json({ message: 'ID de venta inválido' });
     }
 
-    await prisma.venta.delete({ where: { idventa: id } });
+    console.log(`Eliminando venta ${id}`);
+
+    const ventaExiste = await prisma.venta.findUnique({
+      where: { idventa: id }
+    });
+
+    if (!ventaExiste) {
+      return res.status(404).json({ message: 'Venta no encontrada' });
+    }
+
+    await prisma.venta.delete({ 
+      where: { idventa: id } 
+    });
+
+    console.log(`Venta ${id} eliminada`);
     res.json({ message: 'Venta eliminada correctamente' });
+
   } catch (error) {
-    res.status(500).json({ message: 'Error al eliminar venta', error: error.message });
+    console.error('Error al eliminar venta:', error);
+    res.status(500).json({ 
+      message: 'Error al eliminar venta', 
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 };
