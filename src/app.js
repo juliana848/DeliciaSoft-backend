@@ -38,7 +38,7 @@ const categoriaInsumosRoutes = require('./routes/categoriaInsumos.routes');
 app.use('/api/categoria-insumos', categoriaInsumosRoutes);
 
 const estadoventaRoutes = require('./routes/estadoventa.routes');
-app.use('/api/estado-venta', estadoventaRoutes); // RUTA CORREGIDA
+app.use('/api/estado-venta', estadoventaRoutes); 
 
 const imagenesRoutes = require('./routes/imagenes.routes');
 app.use('/api/imagenes', imagenesRoutes);
