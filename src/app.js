@@ -1,9 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
-const { PrismaClient } = require('@prisma/client');
 
-const prisma = new PrismaClient();
 const app = express();
 
 // Middlewares
@@ -45,7 +43,6 @@ app.use('/api/imagenes', imagenesRoutes);
 
 const insumosRoutes = require('./routes/insumos.routes');
 app.use('/api/insumos', insumosRoutes);
-
 
 const pedidoRoutes = require('./routes/pedido.routes');
 app.use('/api/pedido', pedidoRoutes);
@@ -90,7 +87,4 @@ app.get('/test-env', (req, res) => {
   });
 });
 
-const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-});
+module.exports = app; 
