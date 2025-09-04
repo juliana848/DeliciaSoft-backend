@@ -37,32 +37,11 @@ app.use('/api/catalogo-sabor', catalogoSaborRoutes);
 const categoriaInsumosRoutes = require('./routes/categoriaInsumos.routes');
 app.use('/api/categoria-insumos', categoriaInsumosRoutes);
 
-const categoriaProductoRoutes = require('./routes/categoriaProducto.routes');
-app.use('/api/categoria-productos', categoriaProductoRoutes);
-
-const compraRoutes = require('./routes/compra.routes');
-app.use('/api/compras', compraRoutes);
-
-const detalleAdicionesRoutes = require('./routes/detalleadiciones.routes');
-app.use('/api/detalleadiciones', detalleAdicionesRoutes);
-
-const detalleCompraRoutes = require('./routes/detallecompra.routes');
-app.use('/api/detallecompra', detalleCompraRoutes);
-
-const detalleProduccionRoutes = require('./routes/detalleproduccion.routes');
-app.use('/api/detalleproduccion', detalleProduccionRoutes);
-
-const detalleRecetaRoutes = require('./routes/detallereceta.routes');
-app.use('/api/detallereceta', detalleRecetaRoutes);
-
-const detalleVentaRoutes = require('./routes/detalleventa.routes');
-app.use('/api/detalleventa', detalleVentaRoutes);
-
-const estadoproduccionRoutes = require('./routes/estadoproduccion.routes');
-app.use('/api/estadoproduccion', estadoproduccionRoutes);
-
 const estadoventaRoutes = require('./routes/estadoventa.routes');
-app.use('/api/estadoventa', estadoventaRoutes);
+app.use('/api/estado-venta', estadoventaRoutes); // RUTA CORREGIDA
+
+const historialproduccionRoutes = require('./routes/historialproduccion.routes');
+app.use('/api/historial-produccion', historialproduccionRoutes);
 
 const imagenesRoutes = require('./routes/imagenes.routes');
 app.use('/api/imagenes', imagenesRoutes);
@@ -70,11 +49,11 @@ app.use('/api/imagenes', imagenesRoutes);
 const insumosRoutes = require('./routes/insumos.routes');
 app.use('/api/insumos', insumosRoutes);
 
+const inventarioInsumosRoutes = require('./routes/inventarioInsumos.routes');
+app.use('/api/inventario-insumos', inventarioInsumosRoutes);
+
 const pedidoRoutes = require('./routes/pedido.routes');
 app.use('/api/pedido', pedidoRoutes);
-
-const permisosRoutes = require('./routes/permisos.routes');
-app.use('/api/permisos', permisosRoutes);
 
 const produccionRoutes = require('./routes/produccion.routes');
 app.use('/api/produccion', produccionRoutes);
@@ -112,11 +91,11 @@ app.use('/api/venta', ventaRoutes);
 // SOLO para pruebas, puedes borrar luego
 app.get('/test-env', (req, res) => {
   res.json({
-    DATABASE_URL: process.env.DATABASE_URL ? '✅ OK' : '❌ MISSING',
-    JWT_SECRET: process.env.JWT_SECRET ? '✅ OK' : '❌ MISSING',
-    EMAIL_USER: process.env.EMAIL_USER ? '✅ OK' : '❌ MISSING',
-    CLOUDINARY_API_KEY: process.env.CLOUDINARY_API_KEY ? '✅ OK' : '❌ MISSING',
+    DATABASE_URL: process.env.DATABASE_URL ? '✅ OK' : '❌ NOT SET'
   });
 });
 
-module.exports = app;
+const PORT = process.env.PORT || 4000;
+app.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
+});
