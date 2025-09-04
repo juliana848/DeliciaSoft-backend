@@ -12,17 +12,16 @@ exports.getAll = async (req, res) => {
       }
     });
 
-    
     const ventasTransformadas = ventas.map(v => ({
       idventa: v.idventa,
       fechaventa: v.fechaventa,
       total: v.total,
       metodopago: v.metodopago,
       tipoventa: v.tipoventa,
-      detalleventa: v.detalleventa.map(d => d.iddetalleventa), // array simple de IDs
-      cliente: v.clienteData ? v.clienteData.idcliente : null, // número directo
-      sede: v.sede ? v.sede.idsede : null, // número directo
-      estadoVenta: v.estadoVenta ? v.estadoVenta.idestadoventa : null // número directo
+      detalleventa: v.detalleventa.map(d => d.iddetalleventa),
+      cliente: v.clienteData ? v.clienteData.idcliente : null,
+      sede: v.sede ? v.sede.idsede : null,
+      estadoVenta: v.estadoVenta ? v.estadoVenta.idestadoventa : null
     }));
 
     res.json(ventasTransformadas);
@@ -84,6 +83,11 @@ exports.getListadoResumen = async (req, res) => {
 exports.getDetailsById = async (req, res) => {
     try {
         const id = parseInt(req.params.id);
+        
+        if (isNaN(id)) {
+            return res.status(400).json({ message: 'ID de venta inválido' });
+        }
+
         const venta = await prisma.venta.findUnique({
             where: { idventa: id },
             include: {
@@ -92,25 +96,14 @@ exports.getDetailsById = async (req, res) => {
                 estadoVenta: true,
                 detalleventa: {
                     include: {
-                        productoGeneral: true,
-                        adiciones: {
+                        productogeneral: true,
+                        detalleadiciones: {
                             include: {
-                                catalogoAdiciones: true
-                            }
-                        },
-                        salsas: {
-                            include: {
-                                catalogoSalsa: true
-                            }
-                        },
-                        sabores: {
-                            include: {
-                                catalogoSabor: true
+                                catalogoadiciones: true
                             }
                         }
                     }
-                },
-                abonos: true
+                }
             }
         });
 
@@ -160,13 +153,46 @@ exports.create = async (req, res) => {
   }
 };
 
+// CORRECCION PRINCIPAL: getById con validación de ID
 exports.getById = async (req, res) => {
   try {
     const id = parseInt(req.params.id);
-    const venta = await prisma.venta.findUnique({ where: { idventa: id } });
-    if (!venta) return res.status(404).json({ message: 'Venta no encontrada' });
+    
+    // Validar que el ID sea un número válido
+    if (isNaN(id)) {
+      return res.status(400).json({ message: 'ID de venta inválido' });
+    }
+
+    const venta = await prisma.venta.findUnique({ 
+      where: { idventa: id },
+      include: {
+        estadoVenta: {
+          select: {
+            idestadoventa: true,
+            nombre_estado: true
+          }
+        },
+        clienteData: {
+          select: {
+            nombre: true,
+            apellido: true
+          }
+        },
+        sede: {
+          select: {
+            nombre: true
+          }
+        }
+      }
+    });
+    
+    if (!venta) {
+      return res.status(404).json({ message: 'Venta no encontrada' });
+    }
+    
     res.json(venta);
   } catch (error) {
+    console.error('Error en getById:', error);
     res.status(500).json({ message: 'Error al obtener venta', error: error.message });
   }
 };
@@ -174,6 +200,11 @@ exports.getById = async (req, res) => {
 exports.update = async (req, res) => {
   try {
     const id = parseInt(req.params.id);
+    
+    if (isNaN(id)) {
+      return res.status(400).json({ message: 'ID de venta inválido' });
+    }
+
     const updated = await prisma.venta.update({
       where: { idventa: id },
       data: req.body
@@ -187,6 +218,11 @@ exports.update = async (req, res) => {
 exports.remove = async (req, res) => {
   try {
     const id = parseInt(req.params.id);
+    
+    if (isNaN(id)) {
+      return res.status(400).json({ message: 'ID de venta inválido' });
+    }
+
     await prisma.venta.delete({ where: { idventa: id } });
     res.json({ message: 'Venta eliminada correctamente' });
   } catch (error) {
