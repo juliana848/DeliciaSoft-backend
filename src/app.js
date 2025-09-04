@@ -46,8 +46,6 @@ app.use('/api/imagenes', imagenesRoutes);
 const insumosRoutes = require('./routes/insumos.routes');
 app.use('/api/insumos', insumosRoutes);
 
-const inventarioInsumosRoutes = require('./routes/inventarioInsumos.routes');
-app.use('/api/inventario-insumos', inventarioInsumosRoutes);
 
 const pedidoRoutes = require('./routes/pedido.routes');
 app.use('/api/pedido', pedidoRoutes);
