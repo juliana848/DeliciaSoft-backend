@@ -12,13 +12,19 @@ exports.getAll = async (req, res) => {
     res.status(500).json({ message: 'Error al obtener compras', error: error.message });
   }
 };
-
 // Obtener una compra por ID
 exports.getById = async (req, res) => {
   try {
     const compra = await prisma.compra.findUnique({
       where: { idcompra: parseInt(req.params.id) },
-      include: { proveedor: true, detallecompra: true }
+      include: {
+        proveedor: true, 
+        detallecompra: {
+          include: {
+            insumos: true, 
+          },
+        },
+      },
     });
     if (!compra) return res.status(404).json({ message: 'Compra no encontrada' });
     res.json(compra);
