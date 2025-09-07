@@ -83,6 +83,9 @@ app.use('/api/usuarios', usuariosRoutes);
 const ventaRoutes = require('./routes/venta.routes');
 app.use('/api/venta', ventaRoutes);
 
+const contactoRoutes = require('./routes/contacto.routes');
+app.use('/api/contacto', contactoRoutes);
+
 // SOLO para pruebas, puedes borrar luego
 app.get('/test-env', (req, res) => {
   res.json({
