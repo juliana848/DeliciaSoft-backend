@@ -121,6 +121,41 @@ const toggleEstadoCliente = async (req, res) => {
   }
 };
 
+// Verificar si cliente tiene ventas asociadas
+const clienteTieneVentas = async (req, res) => {
+  const id = parseInt(req.params.id);
+  
+  try {
+    const ventas = await prisma.venta.findMany({
+      where: { idcliente: id }
+    });
+    
+    res.json({ tieneVentas: ventas.length > 0, cantidadVentas: ventas.length });
+  } catch (error) {
+    res.status(500).json({ message: "Error al verificar ventas", error: error.message });
+  }
+};
+
+// Actualizar contraseña de cliente
+const actualizarContrasenaCliente = async (req, res) => {
+  const id = parseInt(req.params.id);
+  const { nuevaContrasena } = req.body;
+
+  try {
+    const clienteActualizado = await prisma.cliente.update({
+      where: { idcliente: id },
+      data: { hashcontrasena: nuevaContrasena }
+    });
+    
+    res.json({ 
+      message: "Contraseña actualizada correctamente", 
+      cliente: clienteActualizado 
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Error al actualizar contraseña", error: error.message });
+  }
+};
+
 
 module.exports = {
   validateCliente,
@@ -129,5 +164,7 @@ module.exports = {
   createCliente,
   updateCliente,
   deleteCliente,
-  toggleEstadoCliente
+  toggleEstadoCliente,
+  clienteTieneVentas,          
+  actualizarContrasenaCliente  
 };

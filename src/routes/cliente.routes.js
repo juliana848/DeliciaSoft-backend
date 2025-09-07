@@ -9,6 +9,8 @@ router.get('/:id', clienteController.getCliente);
 router.post('/', clienteController.createCliente);
 router.put('/:id', clienteController.updateCliente);
 router.delete('/:id', clienteController.deleteCliente);
+router.get('/:id/ventas', clienteTieneVentas);
+router.patch('/:id/password', actualizarContrasenaCliente);
 
 // Ruta para activar/desactivar cliente
 router.patch('/:id/estado', clienteController.toggleEstadoCliente);
