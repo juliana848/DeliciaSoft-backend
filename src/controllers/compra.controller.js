@@ -34,24 +34,48 @@ exports.getById = async (req, res) => {
 };
 
 // Crear nueva compra
-exports.create = async (req, res) => {
-  try {
-    const { idproveedor, fecharegistro, fechacompra, subtotal, iva, total } = req.body;
-    const nuevaCompra = await prisma.compra.create({
-      data: {
-        idproveedor,
-        fecharegistro: fecharegistro ? new Date(fecharegistro) : null,
-        fechacompra: fechacompra ? new Date(fechacompra) : null,
-        subtotal,
-        iva,
-        total
-      }
-    });
-    res.status(201).json(nuevaCompra);
-  } catch (error) {
-    res.status(500).json({ message: 'Error al crear la compra', error: error.message });
+// exports.create = async (req, res) => {
+//   try {
+//     const { idproveedor, fecharegistro, fechacompra, subtotal, iva, total } = req.body;
+//     const nuevaCompra = await prisma.compra.create({
+//       data: {
+//         idproveedor,
+//         fecharegistro: fecharegistro ? new Date(fecharegistro) : null,
+//         fechacompra: fechacompra ? new Date(fechacompra) : null,
+//         subtotal,
+//         iva,
+//         total
+//       }
+//     });
+//     res.status(201).json(nuevaCompra);
+//   } catch (error) {
+//     res.status(500).json({ message: 'Error al crear la compra', error: error.message });
+//   }
+// };
+const { idproveedor, fecharegistro, fechacompra, subtotal, iva, total, detallecompra } = req.body;
+
+const nuevaCompra = await prisma.compra.create({
+  data: {
+    idproveedor,
+    fecharegistro: fecharegistro ? new Date(fecharegistro) : null,
+    fechacompra: fechacompra ? new Date(fechacompra) : null,
+    subtotal,
+    iva,
+    total,
+    detallecompra: {
+      create: detallecompra.map(d => ({
+        idinsumos: d.idinsumos,
+        cantidad: d.cantidad,
+        preciounitario: d.preciounitario,
+        subtotalproducto: d.subtotalproducto
+      }))
+    }
+  },
+  include: {
+    proveedor: true,
+    detallecompra: { include: { insumos: true } }
   }
-};
+});
 
 // Actualizar compra
 exports.update = async (req, res) => {
@@ -75,13 +99,16 @@ exports.update = async (req, res) => {
 };
 
 // Eliminar compra
-exports.remove = async (req, res) => {
+// Anular compra (cambiar estado)
+exports.anular = async (req, res) => {
   try {
-    await prisma.compra.delete({
-      where: { idcompra: parseInt(req.params.id) }
+    const anulada = await prisma.compra.update({
+      where: { idcompra: parseInt(req.params.id) },
+      data: { estado: false }
     });
-    res.json({ message: 'Compra eliminada correctamente' });
+    res.json({ message: 'Compra anulada correctamente', anulada });
   } catch (error) {
-    res.status(500).json({ message: 'Error al eliminar la compra', error: error.message });
+    res.status(500).json({ message: 'Error al anular la compra', error: error.message });
   }
 };
+
