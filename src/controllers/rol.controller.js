@@ -37,6 +37,11 @@ exports.getAll = async (req, res) => {
 exports.getById = async (req, res) => {
   try {
     const idrol = parseInt(req.params.id);
+
+    if (isNaN(idrol)) {
+      return res.status(400).json({ message: 'ID de rol inválido' });
+    }
+
     const rol = await prisma.rol.findUnique({
       where: { idrol },
       include: {
@@ -47,7 +52,9 @@ exports.getById = async (req, res) => {
       }
     });
 
-    if (!rol) return res.status(404).json({ message: 'Rol no encontrado' });
+    if (!rol) {
+      return res.status(404).json({ message: 'Rol no encontrado' });
+    }
 
     res.json({
       idrol: rol.idrol,
@@ -61,6 +68,7 @@ exports.getById = async (req, res) => {
     res.status(500).json({ message: 'Error al obtener rol', error: error.message });
   }
 };
+
 
 // Crear rol con permisos
 exports.create = async (req, res) => {

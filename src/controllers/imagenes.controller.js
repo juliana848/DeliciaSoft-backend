@@ -24,15 +24,25 @@ exports.getAll = async (req, res) => {
 // Obtener imagen por id
 exports.getById = async (req, res) => {
   try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) {
+      return res.status(400).json({ message: "El id debe ser un número válido" });
+    }
+
     const imagen = await prisma.imagenes.findUnique({
-      where: { idimagen: parseInt(req.params.id) }
+      where: { idimagen: id }
     });
-    if (!imagen) return res.status(404).json({ message: 'Imagen no encontrada' });
+
+    if (!imagen) {
+      return res.status(404).json({ message: 'Imagen no encontrada' });
+    }
+
     res.json(imagen);
   } catch (error) {
     res.status(500).json({ message: 'Error al obtener imagen', error: error.message });
   }
 };
+
 
 // Subir imagen a Cloudinary y guardar url en BD
 exports.uploadImage = async (req, res) => {
