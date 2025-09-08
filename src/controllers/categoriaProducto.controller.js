@@ -33,8 +33,16 @@ exports.getById = async (req, res) => {
         imagenes: true // Incluir la relación con imágenes
       }
     });
+    
     if (!categoria) return res.status(404).json({ message: 'Categoría de producto no encontrada' });
-    res.json(categoria);
+    
+    // Mapear para incluir campo imagen por compatibilidad
+    const categoriaConImagen = {
+      ...categoria,
+      imagen: categoria.imagenes ? categoria.imagenes.urlimg : null
+    };
+    
+    res.json(categoriaConImagen);
   } catch (error) {
     res.status(500).json({ message: 'Error al obtener la categoría de producto', error: error.message });
   }
@@ -65,6 +73,9 @@ exports.create = async (req, res) => {
   try {
     const { nombrecategoria, descripcion, estado } = req.body;
     
+    console.log('Datos recibidos:', { nombrecategoria, descripcion, estado });
+    console.log('Archivo recibido:', req.file ? 'Sí' : 'No');
+    
     // Validaciones básicas
     if (!nombrecategoria || nombrecategoria.trim() === '') {
       return res.status(400).json({ message: 'El nombre de la categoría es obligatorio' });
@@ -82,20 +93,20 @@ exports.create = async (req, res) => {
       return res.status(400).json({ message: 'La descripción no puede tener más de 50 caracteres' });
     }
 
-    // Crear la categoría primero
-    const nuevaCategoria = await prisma.categoriaproducto.create({
-      data: { 
-        nombrecategoria: nombrecategoria.trim(), 
-        descripcion: descripcion.trim(), 
-        estado: estado !== undefined ? estado : true 
-      }
-    });
+    // Datos base para crear la categoría
+    const datosCategoria = { 
+      nombrecategoria: nombrecategoria.trim(), 
+      descripcion: descripcion.trim(), 
+      estado: estado !== undefined ? Boolean(estado) : true 
+    };
 
-    // Si hay imagen, subirla y asociarla
+    // Si hay imagen, subirla primero
     let imagenId = null;
     if (req.file) {
       try {
+        console.log('Subiendo imagen a Cloudinary...');
         const result = await uploadToCloudinary(req.file.buffer);
+        console.log('Imagen subida exitosamente:', result.secure_url);
         
         const nuevaImagen = await prisma.imagenes.create({
           data: {
@@ -104,33 +115,52 @@ exports.create = async (req, res) => {
         });
         
         imagenId = nuevaImagen.idimagen;
+        console.log('Imagen guardada en BD con ID:', imagenId);
       } catch (imageError) {
         console.error('Error al subir imagen:', imageError);
         // No fallar la creación de categoría si falla la imagen
       }
     }
 
-    // Actualizar la categoría con el ID de la imagen si se subió exitosamente
+    // Agregar ID de imagen si existe
     if (imagenId) {
-      await prisma.categoriaproducto.update({
-        where: { idcategoriaproducto: nuevaCategoria.idcategoriaproducto },
-        data: { idimagencat: imagenId }
-      });
+      datosCategoria.idimagencat = imagenId;
     }
 
-    // Obtener la categoría completa con imagen
-    const categoriaCompleta = await prisma.categoriaproducto.findUnique({
-      where: { idcategoriaproducto: nuevaCategoria.idcategoriaproducto },
+    console.log('Creando categoría con datos:', datosCategoria);
+
+    // Crear la categoría
+    const nuevaCategoria = await prisma.categoriaproducto.create({
+      data: datosCategoria,
       include: {
         imagenes: true
       }
     });
 
-    res.status(201).json(categoriaCompleta);
+    console.log('Categoría creada exitosamente:', nuevaCategoria);
+
+    // Mapear respuesta para incluir campo imagen por compatibilidad
+    const categoriaRespuesta = {
+      ...nuevaCategoria,
+      imagen: nuevaCategoria.imagenes ? nuevaCategoria.imagenes.urlimg : null
+    };
+
+    res.status(201).json(categoriaRespuesta);
   } catch (error) {
+    console.error('Error completo al crear categoría:', error);
+    
     if (error.code === 'P2002') {
       return res.status(409).json({ message: 'Ya existe una categoría con ese nombre' });
     }
+    
+    // Si el error es relacionado con el campo idimagencat
+    if (error.message && error.message.includes('idimagencat')) {
+      return res.status(500).json({ 
+        message: 'Error de base de datos: El campo de imagen no está configurado. Ejecuta las migraciones primero.',
+        error: error.message 
+      });
+    }
+    
     res.status(500).json({ message: 'Error al crear la categoría de producto', error: error.message });
   }
 };
