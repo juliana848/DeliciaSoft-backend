@@ -38,6 +38,9 @@ app.use('/api/catalogo-sabor', catalogoSaborRoutes);
 const categoriaInsumosRoutes = require('./routes/categoriaInsumos.routes');
 app.use('/api/categoria-insumos', categoriaInsumosRoutes);
 
+const categoriaProductosRoutes = require('./routes/categoriaProducto.routes');
+app.use('/api/categorias-productos', categoriaProductosRoutes);
+
 const estadoventaRoutes = require('./routes/estadoventa.routes');
 app.use('/api/estado-venta', estadoventaRoutes); 
 
