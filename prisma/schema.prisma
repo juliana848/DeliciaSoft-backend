@@ -59,11 +59,13 @@ model categoriainsumos {
 
 model categoriaproducto {
   idcategoriaproducto Int               @id @default(autoincrement())
-  nombrecategoria     String?           @db.VarChar(20)
-  descripcion         String?           @db.VarChar(50)
-  estado              Boolean?
-  imagen              Int?
-  imagenes            imagenes?         @relation(fields: [imagen], references: [idimagen], onDelete: NoAction, onUpdate: NoAction, map: "cat_producto_imagenes")
+  nombrecategoria     String            @unique @db.VarChar(20)
+  descripcion         String            @db.VarChar(50)
+  estado              Boolean           @default(true)
+  idimagencat         Int?              // Nuevo campo opcional para la imagen
+  
+  // Relaciones
+  imagenes            imagenes?         @relation(fields: [idimagencat], references: [idimagen], onDelete: SetNull)
   productogeneral     productogeneral[]
 }
 
