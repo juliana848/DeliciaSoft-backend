@@ -28,7 +28,7 @@ router.post('/', upload.single('imagen'), controller.create);
 router.put('/:id', upload.single('imagen'), controller.update);
 
 router.delete('/:id', controller.remove);
-
+router.post('/test-cloudinary', upload.single('imagen'), controller.testCloudinary);
 router.patch('/:id/estado', controller.toggleEstado); 
 router.get('/:id/productos', controller.getProductosPorCategoria); 
 

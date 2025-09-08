@@ -1,7 +1,6 @@
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 const cloudinary = require('cloudinary').v2;
-const streamifier = require('streamifier');
 
 // Configurar Cloudinary (asegurate de tener las variables de entorno)
 cloudinary.config({
@@ -9,6 +8,50 @@ cloudinary.config({
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
+
+// Función auxiliar para subir imagen a Cloudinary - CORREGIDA
+const uploadToCloudinary = (fileBuffer) => {
+  return new Promise((resolve, reject) => {
+    console.log('Iniciando subida a Cloudinary...');
+    console.log('Buffer recibido, tamaño:', fileBuffer ? fileBuffer.length : 'null');
+    
+    // Verificar que tenemos el buffer
+    if (!fileBuffer) {
+      console.error('No se recibió buffer de archivo');
+      return reject(new Error('No se recibió buffer de archivo'));
+    }
+
+    // Verificar configuración de Cloudinary
+    if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
+      console.error('Variables de entorno de Cloudinary no configuradas');
+      return reject(new Error('Variables de entorno de Cloudinary no configuradas'));
+    }
+
+    const stream = cloudinary.uploader.upload_stream(
+      { 
+        folder: 'deliciasoft/categorias',
+        resource_type: 'image', // Especificar que es una imagen
+        transformation: [
+          { width: 500, height: 500, crop: 'fill' },
+          { quality: 'auto' }
+        ]
+      },
+      (error, result) => {
+        if (error) {
+          console.error('Error en Cloudinary:', error);
+          reject(error);
+        } else {
+          console.log('Imagen subida exitosamente a Cloudinary:', result.secure_url);
+          resolve(result);
+        }
+      }
+    );
+
+    // Escribir el buffer directamente al stream
+    stream.write(fileBuffer);
+    stream.end();
+  });
+};
 
 // Obtener todas las categorías de producto
 exports.getAll = async (req, res) => {
@@ -48,33 +91,22 @@ exports.getById = async (req, res) => {
   }
 };
 
-// Función auxiliar para subir imagen a Cloudinary
-const uploadToCloudinary = (fileBuffer) => {
-  return new Promise((resolve, reject) => {
-    const stream = cloudinary.uploader.upload_stream(
-      { 
-        folder: 'deliciasoft/categorias',
-        transformation: [
-          { width: 500, height: 500, crop: 'fill' },
-          { quality: 'auto' }
-        ]
-      },
-      (error, result) => {
-        if (result) resolve(result);
-        else reject(error);
-      }
-    );
-    streamifier.createReadStream(fileBuffer).pipe(stream);
-  });
-};
-
-// Crear nueva categoría de producto
+// Crear nueva categoría de producto - CORREGIDA
 exports.create = async (req, res) => {
   try {
     const { nombrecategoria, descripcion, estado } = req.body;
     
+    console.log('=== CREAR CATEGORÍA ===');
     console.log('Datos recibidos:', { nombrecategoria, descripcion, estado });
-    console.log('Archivo recibido:', req.file ? 'Sí' : 'No');
+    console.log('Archivo recibido:', req.file ? 'SÍ' : 'NO');
+    if (req.file) {
+      console.log('Detalles del archivo:', {
+        originalname: req.file.originalname,
+        mimetype: req.file.mimetype,
+        size: req.file.size,
+        bufferLength: req.file.buffer ? req.file.buffer.length : 'sin buffer'
+      });
+    }
     
     // Validaciones básicas
     if (!nombrecategoria || nombrecategoria.trim() === '') {
@@ -97,17 +129,18 @@ exports.create = async (req, res) => {
     const datosCategoria = { 
       nombrecategoria: nombrecategoria.trim(), 
       descripcion: descripcion.trim(), 
-      estado: estado !== undefined ? Boolean(estado) : true 
+      estado: estado !== undefined ? Boolean(JSON.parse(estado)) : true 
     };
 
     // Si hay imagen, subirla primero
     let imagenId = null;
-    if (req.file) {
+    if (req.file && req.file.buffer) {
       try {
         console.log('Subiendo imagen a Cloudinary...');
         const result = await uploadToCloudinary(req.file.buffer);
-        console.log('Imagen subida exitosamente:', result.secure_url);
+        console.log('Resultado de Cloudinary:', result.secure_url);
         
+        // Crear registro en tabla imagenes
         const nuevaImagen = await prisma.imagenes.create({
           data: {
             urlimg: result.secure_url
@@ -118,7 +151,8 @@ exports.create = async (req, res) => {
         console.log('Imagen guardada en BD con ID:', imagenId);
       } catch (imageError) {
         console.error('Error al subir imagen:', imageError);
-        // No fallar la creación de categoría si falla la imagen
+        // Continúar sin imagen en lugar de fallar completamente
+        console.log('Continuando sin imagen...');
       }
     }
 
@@ -127,7 +161,7 @@ exports.create = async (req, res) => {
       datosCategoria.idimagencat = imagenId;
     }
 
-    console.log('Creando categoría con datos:', datosCategoria);
+    console.log('Creando categoría con datos finales:', datosCategoria);
 
     // Crear la categoría
     const nuevaCategoria = await prisma.categoriaproducto.create({
@@ -153,23 +187,20 @@ exports.create = async (req, res) => {
       return res.status(409).json({ message: 'Ya existe una categoría con ese nombre' });
     }
     
-    // Si el error es relacionado con el campo idimagencat
-    if (error.message && error.message.includes('idimagencat')) {
-      return res.status(500).json({ 
-        message: 'Error de base de datos: El campo de imagen no está configurado. Ejecuta las migraciones primero.',
-        error: error.message 
-      });
-    }
-    
     res.status(500).json({ message: 'Error al crear la categoría de producto', error: error.message });
   }
 };
 
-// Actualizar categoría de producto
+// Actualizar categoría de producto - CORREGIDA
 exports.update = async (req, res) => {
   try {
     const { nombrecategoria, descripcion, estado } = req.body;
     const id = parseInt(req.params.id);
+    
+    console.log('=== ACTUALIZAR CATEGORÍA ===');
+    console.log('ID:', id);
+    console.log('Datos recibidos:', { nombrecategoria, descripcion, estado });
+    console.log('Archivo recibido:', req.file ? 'SÍ' : 'NO');
     
     // Verificar si existe la categoría
     const categoriaExistente = await prisma.categoriaproducto.findUnique({
@@ -203,8 +234,9 @@ exports.update = async (req, res) => {
     let imagenId = categoriaExistente.idimagencat;
     
     // Si hay nueva imagen, subirla
-    if (req.file) {
+    if (req.file && req.file.buffer) {
       try {
+        console.log('Subiendo nueva imagen a Cloudinary...');
         const result = await uploadToCloudinary(req.file.buffer);
         
         const nuevaImagen = await prisma.imagenes.create({
@@ -214,6 +246,7 @@ exports.update = async (req, res) => {
         });
         
         imagenId = nuevaImagen.idimagen;
+        console.log('Nueva imagen guardada con ID:', imagenId);
         
         // Eliminar imagen anterior si existía
         if (categoriaExistente.idimagencat) {
@@ -221,6 +254,7 @@ exports.update = async (req, res) => {
             await prisma.imagenes.delete({
               where: { idimagen: categoriaExistente.idimagencat }
             });
+            console.log('Imagen anterior eliminada');
           } catch (deleteError) {
             console.error('Error al eliminar imagen anterior:', deleteError);
           }
@@ -231,21 +265,32 @@ exports.update = async (req, res) => {
       }
     }
     
+    // Preparar datos para actualización
+    const datosActualizacion = {};
+    if (nombrecategoria !== undefined) datosActualizacion.nombrecategoria = nombrecategoria.trim();
+    if (descripcion !== undefined) datosActualizacion.descripcion = descripcion.trim();
+    if (estado !== undefined) datosActualizacion.estado = Boolean(JSON.parse(estado));
+    datosActualizacion.idimagencat = imagenId;
+    
+    console.log('Actualizando con datos:', datosActualizacion);
+    
     const actualizada = await prisma.categoriaproducto.update({
       where: { idcategoriaproducto: id },
-      data: { 
-        nombrecategoria: nombrecategoria ? nombrecategoria.trim() : undefined,
-        descripcion: descripcion ? descripcion.trim() : undefined,
-        estado,
-        idimagencat: imagenId
-      },
+      data: datosActualizacion,
       include: {
         imagenes: true
       }
     });
     
-    res.json(actualizada);
+    // Mapear respuesta para incluir campo imagen por compatibilidad
+    const categoriaRespuesta = {
+      ...actualizada,
+      imagen: actualizada.imagenes ? actualizada.imagenes.urlimg : null
+    };
+    
+    res.json(categoriaRespuesta);
   } catch (error) {
+    console.error('Error al actualizar categoría:', error);
     if (error.code === 'P2002') {
       return res.status(409).json({ message: 'Ya existe una categoría con ese nombre' });
     }
@@ -278,6 +323,7 @@ exports.toggleEstado = async (req, res) => {
     
     res.json({
       ...categoriaActualizada,
+      imagen: categoriaActualizada.imagenes ? categoriaActualizada.imagenes.urlimg : null,
       message: `Categoría ${nuevoEstado ? 'activada' : 'desactivada'} exitosamente`
     });
   } catch (error) {
@@ -355,6 +401,26 @@ exports.getProductosPorCategoria = async (req, res) => {
   }
 };
 
+// Función de prueba - agregar temporalmente
+exports.testCloudinary = async (req, res) => {
+  try {
+    console.log('Configuración de Cloudinary:');
+    console.log('Cloud Name:', process.env.CLOUDINARY_CLOUD_NAME ? 'Configurado' : 'No configurado');
+    console.log('API Key:', process.env.CLOUDINARY_API_KEY ? 'Configurado' : 'No configurado');
+    console.log('API Secret:', process.env.CLOUDINARY_API_SECRET ? 'Configurado' : 'No configurado');
+    
+    if (req.file) {
+      const result = await uploadToCloudinary(req.file.buffer);
+      res.json({ message: 'Imagen subida exitosamente', url: result.secure_url });
+    } else {
+      res.status(400).json({ message: 'No se recibió archivo' });
+    }
+  } catch (error) {
+    console.error('Error en test:', error);
+    res.status(500).json({ message: 'Error en test', error: error.message });
+  }
+};
+
 // Obtener solo categorías activas
 exports.getActive = async (req, res) => {
   try {
@@ -365,7 +431,14 @@ exports.getActive = async (req, res) => {
       },
       orderBy: { nombrecategoria: 'asc' }
     });
-    res.json(categoriasActivas);
+    
+    // Mapear para incluir campo imagen por compatibilidad
+    const categoriasMapeadas = categoriasActivas.map(categoria => ({
+      ...categoria,
+      imagen: categoria.imagenes ? categoria.imagenes.urlimg : null
+    }));
+    
+    res.json(categoriasMapeadas);
   } catch (error) {
     res.status(500).json({ message: 'Error al obtener categorías activas', error: error.message });
   }
