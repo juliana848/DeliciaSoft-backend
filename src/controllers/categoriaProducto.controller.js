@@ -9,48 +9,122 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-// Función auxiliar para subir imagen a Cloudinary - CORREGIDA
-const uploadToCloudinary = (fileBuffer) => {
+// Reemplaza tu función uploadToCloudinary con esta versión mejorada:
+
+const uploadToCloudinary = async (fileBuffer) => {
   return new Promise((resolve, reject) => {
-    console.log('Iniciando subida a Cloudinary...');
-    console.log('Buffer recibido, tamaño:', fileBuffer ? fileBuffer.length : 'null');
+    console.log('=== CLOUDINARY UPLOAD INICIADO ===');
     
-    // Verificar que tenemos el buffer
+    // Verificaciones básicas
     if (!fileBuffer) {
-      console.error('No se recibió buffer de archivo');
+      console.error('❌ Buffer vacío');
       return reject(new Error('No se recibió buffer de archivo'));
     }
-
-    // Verificar configuración de Cloudinary
-    if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
-      console.error('Variables de entorno de Cloudinary no configuradas');
-      return reject(new Error('Variables de entorno de Cloudinary no configuradas'));
+    
+    if (!Buffer.isBuffer(fileBuffer)) {
+      console.error('❌ No es un Buffer válido');
+      return reject(new Error('El archivo no es un Buffer válido'));
     }
-
-    const stream = cloudinary.uploader.upload_stream(
-      { 
+    
+    console.log('✅ Buffer válido, tamaño:', fileBuffer.length, 'bytes');
+    
+    // Verificar configuración
+    const requiredVars = ['CLOUDINARY_CLOUD_NAME', 'CLOUDINARY_API_KEY', 'CLOUDINARY_API_SECRET'];
+    const missingVars = requiredVars.filter(varName => !process.env[varName]);
+    
+    if (missingVars.length > 0) {
+      const error = `Variables faltantes: ${missingVars.join(', ')}`;
+      console.error('❌', error);
+      return reject(new Error(error));
+    }
+    
+    console.log('✅ Variables de entorno presentes');
+    
+    // Configurar Cloudinary explícitamente antes del upload
+    try {
+      cloudinary.config({
+        cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+        api_key: process.env.CLOUDINARY_API_KEY,
+        api_secret: process.env.CLOUDINARY_API_SECRET,
+        secure: true
+      });
+      
+      console.log('✅ Cloudinary configurado');
+      console.log('🔧 Cloud name configurado:', cloudinary.config().cloud_name);
+    } catch (configError) {
+      console.error('❌ Error de configuración:', configError);
+      return reject(new Error('Error al configurar Cloudinary: ' + configError.message));
+    }
+    
+    // Crear el stream de upload
+    console.log('📤 Creando stream de upload...');
+    
+    const uploadStream = cloudinary.uploader.upload_stream(
+      {
         folder: 'deliciasoft/categorias',
-        resource_type: 'image', // Especificar que es una imagen
+        resource_type: 'image',
         transformation: [
           { width: 500, height: 500, crop: 'fill' },
-          { quality: 'auto' }
-        ]
+          { quality: 'auto', format: 'auto' }
+        ],
+        // Agregar timeout
+        timeout: 60000 // 60 segundos
       },
       (error, result) => {
         if (error) {
-          console.error('Error en Cloudinary:', error);
-          reject(error);
+          console.error('❌ Error en Cloudinary upload:', error);
+          
+          // Mensaje de error más específico
+          if (error.message && error.message.includes('Invalid API Key')) {
+            return reject(new Error('API Key de Cloudinary inválida. Verifica tus credenciales.'));
+          }
+          if (error.message && error.message.includes('Invalid API Secret')) {
+            return reject(new Error('API Secret de Cloudinary inválido. Verifica tus credenciales.'));
+          }
+          if (error.http_code === 401) {
+            return reject(new Error('Error de autenticación con Cloudinary. Verifica tus credenciales.'));
+          }
+          
+          reject(new Error(`Error de Cloudinary: ${error.message || 'Error desconocido'}`));
         } else {
-          console.log('Imagen subida exitosamente a Cloudinary:', result.secure_url);
+          console.log('✅ Upload exitoso!');
+          console.log('🔗 URL:', result.secure_url);
+          console.log('📁 Public ID:', result.public_id);
+          console.log('📊 Bytes:', result.bytes);
           resolve(result);
         }
       }
     );
-
-    // Escribir el buffer directamente al stream
-    stream.write(fileBuffer);
-    stream.end();
+    
+    // Escribir el buffer al stream con manejo de errores
+    try {
+      console.log('📝 Enviando datos al stream...');
+      uploadStream.write(fileBuffer);
+      uploadStream.end();
+      console.log('✅ Datos enviados correctamente');
+    } catch (streamError) {
+      console.error('❌ Error al escribir al stream:', streamError);
+      reject(new Error('Error al enviar archivo: ' + streamError.message));
+    }
   });
+};
+
+exports.debugCloudinary = async (req, res) => {
+  try {
+    console.log('=== DEBUG CLOUDINARY ===');
+    console.log('Variables:', {
+      cloud_name: !!process.env.CLOUDINARY_CLOUD_NAME,
+      api_key: !!process.env.CLOUDINARY_API_KEY,
+      api_secret: !!process.env.CLOUDINARY_API_SECRET
+    });
+    
+    res.json({
+      configured: !!(process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET),
+      details: 'Check server logs for more info'
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 };
 
 // Obtener todas las categorías de producto
