@@ -177,6 +177,7 @@ model insumos {
   idimagen           Int?
   estado             Boolean?
   cantidad           Decimal?            @db.Decimal(10, 2)
+  precio             Decimal?            @db.Decimal(10, 2) 
   catalogoadiciones  catalogoadiciones[]
   catalogorelleno    catalogorelleno[]
   catalogosabor      catalogosabor[]
