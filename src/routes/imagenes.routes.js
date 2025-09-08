@@ -10,8 +10,9 @@ router.get('/', controller.getAll);
 router.get('/:id', controller.getById);
 router.put('/:id', controller.update);
 router.delete('/:id', controller.remove);
-router.post("/url", imagenesController.saveUrl);
 
+// ✅ Usamos el mismo alias que definimos arriba (controller)
+router.post("/url", controller.saveUrl);
 
 // Ruta para subir imagen - campo 'archivo'
 router.post('/subir', upload.single('archivo'), controller.uploadImage);
