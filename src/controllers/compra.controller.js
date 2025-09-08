@@ -89,8 +89,6 @@ exports.create = async (req, res) => {
   }
 };
 
-
-
 // Actualizar compra
 exports.update = async (req, res) => {
   try {
