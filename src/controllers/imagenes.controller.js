@@ -68,6 +68,22 @@ exports.uploadImage = async (req, res) => {
   }
 };
 
+// Guardar imagen ya subida (solo URL)
+exports.saveUrl = async (req, res) => {
+  try {
+    const { urlimg } = req.body;
+    if (!urlimg) return res.status(400).json({ message: "Falta urlimg" });
+
+    const nuevaImagen = await prisma.imagenes.create({
+      data: { urlimg }
+    });
+
+    res.status(201).json(nuevaImagen);
+  } catch (error) {
+    res.status(500).json({ message: "Error al guardar URL", error: error.message });
+  }
+};
+
 // Actualizar url de imagen (opcional)
 exports.update = async (req, res) => {
   try {
