@@ -71,6 +71,9 @@ app.use('/api/receta', recetaRoutes);
 const rolRoutes = require('./routes/rol.routes');
 app.use('/api/rol', rolRoutes);
 
+const permisosRoutes = require('./routes/permisos.routes');
+app.use('/api/permisos', permisosRoutes);
+
 const rolPermisoRoutes = require('./routes/rolpermiso.routes');
 app.use('/api/rolpermiso', rolPermisoRoutes);
 
