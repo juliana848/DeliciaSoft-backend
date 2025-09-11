@@ -90,7 +90,7 @@ exports.getListadoResumen = async (req, res) => {
     }
 };
 
-// FUNCIÓN PARA OBTENER DETALLE POR ID - SÍ REQUIERE ID VÁLIDO
+// FUNCIÓN CORREGIDA PARA OBTENER DETALLE POR ID
 exports.getDetailsById = async (req, res) => {
     try {
         const id = parseInt(req.params.id);
@@ -131,16 +131,17 @@ exports.getDetailsById = async (req, res) => {
                                 precio: true
                             }
                         },
-                        detalleadiciones: {
-                            include: {
-                                catalogoadiciones: {
-                                    select: {
-                                        nombre: true,
-                                        precio: true
-                                    }
-                                }
-                            }
-                        }
+                        // Solo incluir detalleadiciones si existe en tu esquema
+                        // detalleadiciones: {
+                        //     include: {
+                        //         catalogoadiciones: {
+                        //             select: {
+                        //                 nombre: true,
+                        //                 precio: true
+                        //             }
+                        //         }
+                        //     }
+                        // }
                     }
                 }
             }
@@ -150,8 +151,22 @@ exports.getDetailsById = async (req, res) => {
             return res.status(404).json({ message: 'Venta no encontrada.' });
         }
 
+        // Transformar la respuesta
+        const ventaTransformada = {
+            idventa: venta.idventa,
+            fechaventa: venta.fechaventa,
+            total: parseFloat(venta.total || 0),
+            metodopago: venta.metodopago,
+            tipoventa: venta.tipoventa,
+            estadoVentaId: venta.estadoVentaId,
+            clienteData: venta.clienteData,
+            sede: venta.sede,
+            estadoVenta: venta.estadoVenta,
+            detalleventa: venta.detalleventa || []
+        };
+
         console.log(`Detalle de venta ${id} encontrado`);
-        res.json(venta);
+        res.json(ventaTransformada);
 
     } catch (error) {
         console.error('Error en getDetailsById:', error);

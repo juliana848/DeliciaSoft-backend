@@ -20,8 +20,9 @@ app.use('/api/clientes', clienteRoutes);
 const compraRoutes = require('./routes/compra.routes');
 app.use('/api/compra', compraRoutes);
 
-const abonosRoutes = require('./routes/abonos.routes');
-app.use('/api/abonos', abonosRoutes);
+// CORRECCIÓN: Cambiar la ruta base de abonos
+const abonoRoutes = require('./routes/abonos.routes'); 
+app.use('/api/abonos', abonoRoutes); // Cambiar de '/api/abono' a '/api/abonos'
 
 const authRoutes = require('./routes/auth.routes');
 app.use('/api/auth', authRoutes);
@@ -99,4 +100,4 @@ app.get('/test-env', (req, res) => {
   });
 });
 
-module.exports = app; 
+module.exports = app;
