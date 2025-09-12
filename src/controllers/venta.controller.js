@@ -90,6 +90,113 @@ exports.getListadoResumen = async (req, res) => {
     }
 };
 
+// NUEVA FUNCIÓN PARA OBTENER DETALLE COMPLETO CON ABONOS (/detalles endpoint)
+exports.getDetailsWithAbonos = async (req, res) => {
+    try {
+        const id = parseInt(req.params.id);
+        
+        if (isNaN(id) || id <= 0) {
+            return res.status(400).json({ message: 'ID de venta inválido' });
+        }
+
+        console.log(`Obteniendo detalle completo con abonos de venta ID: ${id}`);
+
+        const venta = await prisma.venta.findUnique({
+            where: { idventa: id },
+            include: {
+                clienteData: {
+                    select: {
+                        nombre: true,
+                        apellido: true,
+                        telefono: true
+                    }
+                },
+                sede: {
+                    select: {
+                        nombre: true,
+                        direccion: true
+                    }
+                },
+                estadoVenta: {
+                    select: {
+                        idestadoventa: true,
+                        nombre_estado: true
+                    }
+                },
+                detalleventa: {
+                    include: {
+                        productogeneral: {
+                            select: {
+                                nombre: true,
+                                precio: true
+                            }
+                        }
+                    }
+                },
+                // Incluir abonos a través de la relación pedido
+                pedido: {
+                    include: {
+                        abonos: {
+                            include: {
+                                imagenes: {
+                                    select: {
+                                        urlimg: true
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        if (!venta) {
+            return res.status(404).json({ message: 'Venta no encontrada.' });
+        }
+
+        // Extraer abonos de la relación pedido
+        let abonos = [];
+        if (venta.pedido && venta.pedido.length > 0) {
+            abonos = venta.pedido.flatMap(p => p.abonos || []);
+        }
+
+        // Transformar la respuesta
+        const ventaTransformada = {
+            idventa: venta.idventa,
+            fechaventa: venta.fechaventa,
+            total: parseFloat(venta.total || 0),
+            metodopago: venta.metodopago,
+            tipoventa: venta.tipoventa,
+            estadoVentaId: venta.estadoVentaId,
+            clienteData: venta.clienteData,
+            sede: venta.sede,
+            estadoVenta: venta.estadoVenta,
+            detalleventa: venta.detalleventa || [],
+            abonos: abonos.map(abono => ({
+                idabono: abono.idabono,
+                idpedido: abono.idpedido,
+                metodopago: abono.metodopago,
+                cantidadpagar: parseFloat(abono.cantidadpagar || 0),
+                TotalPagado: parseFloat(abono.TotalPagado || 0),
+                comprobante_imagen: abono.imagenes?.urlimg || null,
+                fecha: new Date().toISOString().split('T')[0], // Temporal
+                anulado: false
+            }))
+        };
+
+        console.log(`Detalle completo de venta ${id} encontrado con ${abonos.length} abonos`);
+        res.json(ventaTransformada);
+
+    } catch (error) {
+        console.error('Error en getDetailsWithAbonos:', error);
+        res.status(500).json({ 
+            message: 'Error al obtener el detalle completo de la venta.', 
+            error: error.message,
+            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+        });
+    }
+};
+
 // FUNCIÓN CORREGIDA PARA OBTENER DETALLE POR ID
 exports.getDetailsById = async (req, res) => {
     try {
@@ -130,18 +237,7 @@ exports.getDetailsById = async (req, res) => {
                                 nombre: true,
                                 precio: true
                             }
-                        },
-                        // Solo incluir detalleadiciones si existe en tu esquema
-                        // detalleadiciones: {
-                        //     include: {
-                        //         catalogoadiciones: {
-                        //             select: {
-                        //                 nombre: true,
-                        //                 precio: true
-                        //             }
-                        //         }
-                        //     }
-                        // }
+                        }
                     }
                 }
             }

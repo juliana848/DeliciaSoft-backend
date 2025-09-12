@@ -138,6 +138,50 @@ const createAbono = async (req, res) => {
       return res.status(400).json({ message: "Cantidad a pagar debe ser mayor a 0" });
     }
 
+    // Validar longitud del método de pago
+    if (metodopago.length > 20) {
+      return res.status(400).json({ message: "Método de pago muy largo (máximo 20 caracteres)" });
+    }
+
+    console.log('Validaciones pasadas. Método de pago:', metodopago, 'Longitud:', metodopago.length);
+
+    // Verificar que existe el pedido/venta
+    const pedidoExiste = await prisma.pedido.findFirst({
+      where: { idventa: parseInt(idpedido) },
+      include: { venta: true }
+    });
+
+    if (!pedidoExiste) {
+      console.log('Pedido no encontrado, creando uno nuevo para la venta:', idpedido);
+      
+      // Crear el pedido si no existe
+      try {
+        const nuevoPedido = await prisma.pedido.create({
+          data: {
+            idventa: parseInt(idpedido),
+            fecha: new Date(),
+            estado: 'activo' // o el estado que uses por defecto
+          }
+        });
+        console.log('Pedido creado con ID:', nuevoPedido.idpedido);
+      } catch (pedidoError) {
+        console.error('Error al crear pedido:', pedidoError);
+        return res.status(500).json({ 
+          message: "Error al crear pedido para la venta", 
+          error: pedidoError.message 
+        });
+      }
+    }
+
+    // Obtener el ID del pedido
+    const pedido = await prisma.pedido.findFirst({
+      where: { idventa: parseInt(idpedido) }
+    });
+
+    if (!pedido) {
+      return res.status(404).json({ message: "No se pudo encontrar o crear el pedido" });
+    }
+
     let imagenId = null;
 
     // Si hay archivo de imagen, subirlo a Cloudinary
@@ -169,7 +213,7 @@ const createAbono = async (req, res) => {
     // Crear el abono
     const nuevoAbono = await prisma.abonos.create({
       data: {
-        idpedido: parseInt(idpedido),
+        idpedido: pedido.idpedido, // Usar el ID del pedido, no de la venta
         metodopago: metodopago,
         cantidadpagar: parseFloat(cantidadpagar),
         TotalPagado: parseFloat(TotalPagado || cantidadpagar),
@@ -228,6 +272,11 @@ const updateAbono = async (req, res) => {
 
     const { metodopago, cantidadpagar, TotalPagado } = req.body;
     let imagenId = abonoExiste.idimagen;
+
+    // Validar longitud del método de pago si viene en la actualización
+    if (metodopago && metodopago.length > 20) {
+      return res.status(400).json({ message: "Método de pago muy largo (máximo 20 caracteres)" });
+    }
 
     // Si hay nueva imagen, subirla
     if (req.file) {
@@ -345,24 +394,49 @@ const deleteAbono = async (req, res) => {
 const getAbonosByPedidoId = async (req, res) => {
   const idPedido = parseInt(req.params.idPedido);
   try {
-    console.log(`Obteniendo abonos del pedido ${idPedido}`);
+    console.log(`Obteniendo abonos del pedido/venta ${idPedido}`);
+
+    // Primero buscar el pedido por idventa (ya que el frontend envía el ID de venta)
+    const pedido = await prisma.pedido.findFirst({
+      where: { idventa: idPedido },
+      include: { 
+        venta: { 
+          select: { total: true } 
+        } 
+      }
+    });
+
+    if (!pedido) {
+      console.log('No se encontró pedido para la venta, creando uno...');
+      // Si no existe pedido, crear uno para esta venta
+      try {
+        const nuevoPedido = await prisma.pedido.create({
+          data: {
+            idventa: idPedido,
+            fecha: new Date(),
+            estado: 'activo'
+          },
+          include: { 
+            venta: { 
+              select: { total: true } 
+            } 
+          }
+        });
+        console.log('Pedido creado para venta:', idPedido);
+        return res.json([]); // Retornar array vacío ya que no hay abonos aún
+      } catch (createError) {
+        console.error('Error al crear pedido:', createError);
+        return res.json([]); // Retornar array vacío en caso de error
+      }
+    }
 
     const abonos = await prisma.abonos.findMany({
-      where: { idpedido: idPedido },
+      where: { idpedido: pedido.idpedido },
       include: {
         imagenes: {
           select: { 
             idimagen: true,
             urlimg: true 
-          }
-        },
-        pedido: {
-          include: {
-            venta: {
-              select: {
-                total: true
-              }
-            }
           }
         }
       },
@@ -373,7 +447,7 @@ const getAbonosByPedidoId = async (req, res) => {
 
     // Calcular falta por pagar acumulativa
     let totalPagadoAcumulado = 0;
-    const totalVenta = parseFloat(abonos[0]?.pedido?.venta?.total || 0);
+    const totalVenta = parseFloat(pedido.venta?.total || 0);
 
     const resultado = abonos.map((abono, index) => {
       totalPagadoAcumulado += parseFloat(abono.cantidadpagar || 0);
@@ -391,7 +465,7 @@ const getAbonosByPedidoId = async (req, res) => {
       };
     });
 
-    console.log(`Encontrados ${resultado.length} abonos`);
+    console.log(`Encontrados ${resultado.length} abonos para venta ${idPedido}`);
     res.json(resultado);
   } catch (error) {
     console.error('Error al obtener abonos por pedido:', error);

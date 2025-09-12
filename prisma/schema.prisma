@@ -11,7 +11,7 @@ datasource db {
 model abonos {
   idabono       Int       @id @default(autoincrement())
   idpedido      Int?
-  metodopago    String?   @db.VarChar(10)
+  metodopago    String?   @db.VarChar(20)
   idimagen      Int?
   cantidadpagar Decimal?  @db.Decimal(10, 2)
   TotalPagado   Decimal?  @db.Decimal(10, 2)
@@ -62,10 +62,8 @@ model categoriaproducto {
   nombrecategoria     String            @unique @db.VarChar(20)
   descripcion         String            @db.VarChar(50)
   estado              Boolean           @default(true)
-  idimagencat         Int?              // Nuevo campo opcional para la imagen
-  
-  // Relaciones
-  imagenes            imagenes?         @relation(fields: [idimagencat], references: [idimagen], onDelete: SetNull)
+  idimagencat         Int?
+  imagenes            imagenes?         @relation(fields: [idimagencat], references: [idimagen])
   productogeneral     productogeneral[]
 }
 
@@ -300,7 +298,6 @@ model sede {
   nombre    String?  @db.VarChar(20)
   telefono  String?  @db.VarChar(20)
   direccion String?  @db.VarChar(20)
-  idimagen           Int?
   estado    Boolean?
   venta     venta[]
 }
@@ -335,8 +332,8 @@ model venta {
   fechaventa    DateTime?      @db.Date
   cliente       Int?
   idsede        Int?
-  metodopago    String?        @db.VarChar(10)
-  tipoventa     String?        @db.VarChar(10)
+  metodopago    String?        @db.VarChar(20)
+  tipoventa     String?        @db.VarChar(20)
   total         Decimal?       @db.Decimal(10, 2)
   estadoVentaId Int?
   detalleventa  detalleventa[]
