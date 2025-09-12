@@ -69,7 +69,7 @@ const getAbonos = async (req, res) => {
         ? `${abono.pedido.venta.clienteData.nombre} ${abono.pedido.venta.clienteData.apellido}`.trim()
         : 'N/A',
       totalVenta: parseFloat(abono.pedido?.venta?.total || 0),
-      anulado: false // Campo por defecto, se puede agregar a la BD después
+      anulado: false
     }));
 
     res.json(abonosTransformados);
@@ -107,7 +107,7 @@ const getAbono = async (req, res) => {
       monto: parseFloat(abono.cantidadpagar || 0),
       totalPagado: parseFloat(abono.TotalPagado || 0),
       comprobante_imagen: abono.imagenes?.urlimg || null,
-      fecha: new Date().toISOString().split('T')[0], // Temporal hasta agregar campo fecha
+      fecha: new Date().toISOString().split('T')[0],
       cliente: abono.pedido?.venta?.clienteData 
         ? `${abono.pedido.venta.clienteData.nombre} ${abono.pedido.venta.clienteData.apellido}`.trim()
         : 'N/A'
@@ -120,6 +120,7 @@ const getAbono = async (req, res) => {
   }
 };
 
+// FUNCIÓN PRINCIPAL CORREGIDA - ESTA ES LA QUE ESTABA FALLANDO
 const createAbono = async (req, res) => {
   try {
     console.log('Creando abono:', req.body);
@@ -145,41 +146,47 @@ const createAbono = async (req, res) => {
 
     console.log('Validaciones pasadas. Método de pago:', metodopago, 'Longitud:', metodopago.length);
 
-    // Verificar que existe el pedido/venta
-    const pedidoExiste = await prisma.pedido.findFirst({
-      where: { idventa: parseInt(idpedido) },
-      include: { venta: true }
+    // IMPORTANTE: El frontend envía el ID de venta como "idpedido"
+    const idVenta = parseInt(idpedido);
+    console.log('ID de venta recibido:', idVenta);
+    
+    // Verificar que la venta existe
+    const ventaExiste = await prisma.venta.findUnique({
+      where: { idventa: idVenta }
+    });
+    
+    if (!ventaExiste) {
+      return res.status(404).json({ message: "Venta no encontrada con ID: " + idVenta });
+    }
+    
+    console.log('Venta verificada exitosamente:', idVenta);
+
+    // Buscar pedido existente para esta venta
+    let pedido = await prisma.pedido.findFirst({
+      where: { idventa: idVenta }
     });
 
-    if (!pedidoExiste) {
-      console.log('Pedido no encontrado, creando uno nuevo para la venta:', idpedido);
+    // Si no existe pedido, crearlo
+    if (!pedido) {
+      console.log('Creando nuevo pedido para venta:', idVenta);
       
-      // Crear el pedido si no existe
       try {
-        const nuevoPedido = await prisma.pedido.create({
+        pedido = await prisma.pedido.create({
           data: {
-            idventa: parseInt(idpedido),
-            fecha: new Date(),
-            estado: 'activo' // o el estado que uses por defecto
+            idventa: idVenta
+            // Todos los demás campos de tu modelo pedido son opcionales
           }
         });
-        console.log('Pedido creado con ID:', nuevoPedido.idpedido);
+        console.log('Pedido creado exitosamente con ID:', pedido.idpedido, 'para venta:', idVenta);
       } catch (pedidoError) {
         console.error('Error al crear pedido:', pedidoError);
         return res.status(500).json({ 
           message: "Error al crear pedido para la venta", 
-          error: pedidoError.message 
+          error: pedidoError.message
         });
       }
-    }
-
-    // Obtener el ID del pedido
-    const pedido = await prisma.pedido.findFirst({
-      where: { idventa: parseInt(idpedido) }
-    });
-
-    if (!pedido) {
-      return res.status(404).json({ message: "No se pudo encontrar o crear el pedido" });
+    } else {
+      console.log('Usando pedido existente con ID:', pedido.idpedido, 'para venta:', idVenta);
     }
 
     let imagenId = null;
@@ -191,7 +198,6 @@ const createAbono = async (req, res) => {
         const cloudinaryResult = await uploadToCloudinary(req.file.buffer);
         console.log('Imagen subida exitosamente:', cloudinaryResult.secure_url);
 
-        // Guardar la URL en la tabla de imágenes
         const nuevaImagen = await prisma.imagenes.create({
           data: {
             urlimg: cloudinaryResult.secure_url
@@ -210,10 +216,12 @@ const createAbono = async (req, res) => {
       }
     }
 
-    // Crear el abono
+    // Crear el abono usando el ID correcto del pedido (NO el de la venta)
+    console.log('Creando abono con idpedido:', pedido.idpedido);
+    
     const nuevoAbono = await prisma.abonos.create({
       data: {
-        idpedido: pedido.idpedido, // Usar el ID del pedido, no de la venta
+        idpedido: pedido.idpedido, // CRUCIAL: Usar ID del pedido, NO de la venta
         metodopago: metodopago,
         cantidadpagar: parseFloat(cantidadpagar),
         TotalPagado: parseFloat(TotalPagado || cantidadpagar),
@@ -233,7 +241,7 @@ const createAbono = async (req, res) => {
       }
     });
 
-    console.log('Abono creado exitosamente:', nuevoAbono.idabono);
+    console.log('Abono creado exitosamente con ID:', nuevoAbono.idabono);
 
     // Transformar respuesta para el frontend
     const abonoRespuesta = {
@@ -260,7 +268,6 @@ const updateAbono = async (req, res) => {
   try {
     console.log(`Actualizando abono ${id}:`, req.body);
 
-    // Verificar que existe
     const abonoExiste = await prisma.abonos.findUnique({
       where: { idabono: id },
       include: { imagenes: true }
@@ -273,18 +280,15 @@ const updateAbono = async (req, res) => {
     const { metodopago, cantidadpagar, TotalPagado } = req.body;
     let imagenId = abonoExiste.idimagen;
 
-    // Validar longitud del método de pago si viene en la actualización
     if (metodopago && metodopago.length > 20) {
       return res.status(400).json({ message: "Método de pago muy largo (máximo 20 caracteres)" });
     }
 
-    // Si hay nueva imagen, subirla
     if (req.file) {
       try {
         console.log('Subiendo nueva imagen...');
         const cloudinaryResult = await uploadToCloudinary(req.file.buffer);
 
-        // Crear nueva entrada en imágenes
         const nuevaImagen = await prisma.imagenes.create({
           data: {
             urlimg: cloudinaryResult.secure_url
@@ -293,9 +297,7 @@ const updateAbono = async (req, res) => {
 
         imagenId = nuevaImagen.idimagen;
 
-        // Opcional: eliminar imagen anterior de Cloudinary
         if (abonoExiste.imagenes?.urlimg) {
-          // Extraer public_id de la URL para eliminar de Cloudinary
           const urlParts = abonoExiste.imagenes.urlimg.split('/');
           const publicIdWithExtension = urlParts[urlParts.length - 1];
           const publicId = `deliciasoft/comprobantes/${publicIdWithExtension.split('.')[0]}`;
@@ -356,7 +358,6 @@ const deleteAbono = async (req, res) => {
   try {
     console.log(`Eliminando abono ${id}`);
 
-    // Obtener abono con imagen
     const abono = await prisma.abonos.findUnique({
       where: { idabono: id },
       include: { imagenes: true }
@@ -366,7 +367,6 @@ const deleteAbono = async (req, res) => {
       return res.status(404).json({ message: "Abono no encontrado" });
     }
 
-    // Eliminar imagen de Cloudinary si existe
     if (abono.imagenes?.urlimg) {
       const urlParts = abono.imagenes.urlimg.split('/');
       const publicIdWithExtension = urlParts[urlParts.length - 1];
@@ -380,7 +380,6 @@ const deleteAbono = async (req, res) => {
       }
     }
 
-    // Eliminar abono
     await prisma.abonos.delete({ where: { idabono: id } });
     
     console.log('Abono eliminado exitosamente');
@@ -396,7 +395,7 @@ const getAbonosByPedidoId = async (req, res) => {
   try {
     console.log(`Obteniendo abonos del pedido/venta ${idPedido}`);
 
-    // Primero buscar el pedido por idventa (ya que el frontend envía el ID de venta)
+    // El frontend envía el ID de venta, no de pedido
     const pedido = await prisma.pedido.findFirst({
       where: { idventa: idPedido },
       include: { 
@@ -408,13 +407,10 @@ const getAbonosByPedidoId = async (req, res) => {
 
     if (!pedido) {
       console.log('No se encontró pedido para la venta, creando uno...');
-      // Si no existe pedido, crear uno para esta venta
       try {
         const nuevoPedido = await prisma.pedido.create({
           data: {
-            idventa: idPedido,
-            fecha: new Date(),
-            estado: 'activo'
+            idventa: idPedido
           },
           include: { 
             venta: { 
@@ -423,10 +419,10 @@ const getAbonosByPedidoId = async (req, res) => {
           }
         });
         console.log('Pedido creado para venta:', idPedido);
-        return res.json([]); // Retornar array vacío ya que no hay abonos aún
+        return res.json([]);
       } catch (createError) {
         console.error('Error al crear pedido:', createError);
-        return res.json([]); // Retornar array vacío en caso de error
+        return res.json([]);
       }
     }
 
@@ -445,7 +441,6 @@ const getAbonosByPedidoId = async (req, res) => {
       }
     });
 
-    // Calcular falta por pagar acumulativa
     let totalPagadoAcumulado = 0;
     const totalVenta = parseFloat(pedido.venta?.total || 0);
 
@@ -457,11 +452,11 @@ const getAbonosByPedidoId = async (req, res) => {
         idPedido: abono.idpedido,
         metodoPago: abono.metodopago,
         monto: parseFloat(abono.cantidadpagar || 0),
-        fecha: new Date().toISOString().split('T')[0], // Temporal
+        fecha: new Date().toISOString().split('T')[0],
         comprobante_imagen: abono.imagenes?.urlimg || null,
         falta_por_pagar: totalVenta - totalPagadoAcumulado,
         totalPagado: parseFloat(abono.TotalPagado || 0),
-        anulado: false // Campo temporal
+        anulado: false
       };
     });
 
@@ -473,13 +468,11 @@ const getAbonosByPedidoId = async (req, res) => {
   }
 };
 
-// Nueva función para anular abono (marcar como anulado sin eliminarlo)
 const anularAbono = async (req, res) => {
   const id = parseInt(req.params.id);
   try {
     console.log(`Anulando abono ${id}`);
 
-    // Verificar que existe
     const abonoExiste = await prisma.abonos.findUnique({
       where: { idabono: id }
     });
@@ -488,7 +481,6 @@ const anularAbono = async (req, res) => {
       return res.status(404).json({ message: "Abono no encontrado" });
     }
 
-    // Por ahora solo responder éxito, después se puede agregar campo "anulado" a la BD
     console.log('Abono anulado exitosamente');
     res.json({ 
       message: "Abono anulado correctamente",
