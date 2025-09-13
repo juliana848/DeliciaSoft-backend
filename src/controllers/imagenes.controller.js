@@ -15,7 +15,7 @@ cloudinary.config({
 // Validar configuración de Cloudinary
 const validateCloudinaryConfig = () => {
   const { cloud_name, api_key, api_secret } = cloudinary.config();
-  if (!cloud_name || !api_key || !api_secret) {
+  if (!cloud_name || !api_key || api_secret) {
     throw new Error('Configuración de Cloudinary incompleta. Verifica las variables de entorno.');
   }
 };
@@ -76,21 +76,35 @@ exports.getById = async (req, res) => {
   }
 };
 
-// Subir imagen a Cloudinary y guardar URL en BD - MEJORADO
+// Subir imagen a Cloudinary y guardar URL en BD - VERSIÓN SIMPLIFICADA
 exports.uploadImage = async (req, res) => {
   try {
     console.log('📤 Iniciando subida de imagen...');
+    console.log('📝 Datos de request:', {
+      hasFile: !!req.file,
+      body: req.body,
+      headers: Object.keys(req.headers)
+    });
     
     // Validar que se recibió un archivo
     if (!req.file) {
+      console.error('❌ No se recibió archivo');
       return res.status(400).json({ 
         message: 'No se recibió ningún archivo. Asegúrate de usar el campo "image" en el formulario.' 
       });
     }
 
+    console.log('📁 Archivo recibido:', {
+      originalname: req.file.originalname,
+      mimetype: req.file.mimetype,
+      size: req.file.size,
+      fieldname: req.file.fieldname
+    });
+
     // Validar configuración de Cloudinary
     try {
       validateCloudinaryConfig();
+      console.log('✅ Configuración de Cloudinary válida');
     } catch (error) {
       console.error('❌ Error de configuración Cloudinary:', error);
       return res.status(500).json({
@@ -117,20 +131,20 @@ exports.uploadImage = async (req, res) => {
       });
     }
 
-    console.log(`📁 Archivo recibido: ${req.file.originalname} (${(req.file.size / 1024).toFixed(2)}KB)`);
+    console.log(`🔍 Archivo validado: ${req.file.originalname} (${(req.file.size / 1024).toFixed(2)}KB)`);
 
-    // Función para subir a Cloudinary usando stream
+    // Función para subir a Cloudinary usando stream - SIMPLIFICADA
     const streamUpload = (fileBuffer) => {
       return new Promise((resolve, reject) => {
         const options = {
-          folder: 'deliciasoft/productos', // Organizar en carpetas
+          folder: 'deliciasoft/productos',
           transformation: [
             { 
               width: 800, 
               height: 600, 
-              crop: 'limit', // Mantener proporción pero limitar tamaño
-              quality: 'auto:good', // Optimizar calidad automáticamente
-              fetch_format: 'auto' // Formato automático (WebP cuando sea compatible)
+              crop: 'limit',
+              quality: 'auto:good',
+              fetch_format: 'auto'
             }
           ],
           resource_type: 'image'
@@ -157,18 +171,24 @@ exports.uploadImage = async (req, res) => {
     console.log('☁️ Subiendo a Cloudinary...');
     const cloudinaryResult = await streamUpload(req.file.buffer);
 
-    // Guardar información en la base de datos
+    // Guardar información en la base de datos - SOLO CAMPOS BÁSICOS
     console.log('💾 Guardando información en base de datos...');
+    
+    // Crear objeto con solo los campos que existen en tu tabla
+    const datosImagen = {
+      urlimg: cloudinaryResult.secure_url
+    };
+
+    // Solo agregar campos adicionales si existen en tu modelo
+    // Descomenta las líneas que correspondan a tu estructura de BD:
+    // datosImagen.public_id = cloudinaryResult.public_id;
+    // datosImagen.formato = cloudinaryResult.format;
+    // datosImagen.tamano = cloudinaryResult.bytes;
+    // datosImagen.ancho = cloudinaryResult.width;
+    // datosImagen.alto = cloudinaryResult.height;
+
     const nuevaImagen = await prisma.imagenes.create({
-      data: {
-        urlimg: cloudinaryResult.secure_url,
-        // Campos adicionales que podrías querer guardar
-        public_id: cloudinaryResult.public_id, // Para poder eliminar después
-        formato: cloudinaryResult.format,
-        tamano: cloudinaryResult.bytes,
-        ancho: cloudinaryResult.width,
-        alto: cloudinaryResult.height
-      }
+      data: datosImagen
     });
 
     console.log(`✅ Imagen guardada exitosamente con ID: ${nuevaImagen.idimagen}`);
@@ -186,24 +206,35 @@ exports.uploadImage = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('❌ Error al subir imagen:', error);
+    console.error('❌ Error completo al subir imagen:', error);
+    console.error('❌ Stack trace:', error.stack);
     
     // Errores específicos de Cloudinary
     if (error.error && error.error.message) {
       return res.status(400).json({
         message: 'Error del servicio de imágenes',
-        error: error.error.message
+        error: error.error.message,
+        details: error.error
+      });
+    }
+
+    // Error de validación de multer
+    if (error.code === 'LIMIT_FILE_SIZE') {
+      return res.status(400).json({
+        message: 'Archivo demasiado grande',
+        error: 'El archivo excede el límite de tamaño permitido'
       });
     }
 
     res.status(500).json({ 
       message: 'Error interno al subir imagen', 
-      error: error.message 
+      error: error.message,
+      type: error.constructor.name
     });
   }
 };
 
-// Guardar imagen ya subida (solo URL) - Para casos donde ya tienes la URL
+// Guardar imagen ya subida (solo URL)
 exports.saveUrl = async (req, res) => {
   try {
     console.log('💾 Guardando URL de imagen...');
@@ -228,7 +259,8 @@ exports.saveUrl = async (req, res) => {
     const nuevaImagen = await prisma.imagenes.create({
       data: { 
         urlimg,
-        descripcion: descripcion || null
+        // Solo agregar descripción si ese campo existe en tu tabla
+        // descripcion: descripcion || null
       }
     });
 
@@ -285,7 +317,7 @@ exports.update = async (req, res) => {
 
     const datosActualizacion = {};
     if (urlimg) datosActualizacion.urlimg = urlimg;
-    if (descripcion !== undefined) datosActualizacion.descripcion = descripcion;
+    // if (descripcion !== undefined) datosActualizacion.descripcion = descripcion;
 
     const imagenActualizada = await prisma.imagenes.update({
       where: { idimagen: id },
@@ -325,8 +357,8 @@ exports.remove = async (req, res) => {
       where: { idimagen: id },
       select: {
         idimagen: true,
-        urlimg: true,
-        public_id: true
+        urlimg: true
+        // public_id: true  // Descomenta si tienes este campo
       }
     });
 
@@ -336,7 +368,8 @@ exports.remove = async (req, res) => {
       });
     }
 
-    // Si tiene public_id de Cloudinary, intentar eliminar de allí también
+    // Si tienes public_id en tu BD, puedes eliminar de Cloudinary también:
+    /*
     if (imagenExiste.public_id) {
       try {
         console.log(`☁️ Eliminando de Cloudinary: ${imagenExiste.public_id}`);
@@ -344,9 +377,9 @@ exports.remove = async (req, res) => {
         console.log('✅ Imagen eliminada de Cloudinary');
       } catch (cloudinaryError) {
         console.warn('⚠️ No se pudo eliminar de Cloudinary:', cloudinaryError.message);
-        // Continuamos con la eliminación de la BD aunque falle Cloudinary
       }
     }
+    */
 
     // Eliminar de la base de datos
     await prisma.imagenes.delete({ 
@@ -366,7 +399,6 @@ exports.remove = async (req, res) => {
   } catch (error) {
     console.error('❌ Error al eliminar imagen:', error);
     
-    // Error de integridad referencial
     if (error.code === 'P2003') {
       return res.status(400).json({
         message: 'No se puede eliminar la imagen porque está siendo usada por productos u otros elementos',
@@ -391,16 +423,14 @@ exports.getEstadisticas = async (req, res) => {
       prisma.imagenes.count({
         where: {
           OR: [
-            { productogeneral: { some: {} } },
-            // Agregar otras relaciones si las hay
+            { productogeneral: { some: {} } }
           ]
         }
       }),
       prisma.imagenes.count({
         where: {
           AND: [
-            { productogeneral: { none: {} } },
-            // Agregar otras relaciones si las hay
+            { productogeneral: { none: {} } }
           ]
         }
       })
@@ -425,9 +455,11 @@ exports.getEstadisticas = async (req, res) => {
   }
 };
 
-// Validar configuración de Cloudinary (endpoint para debug)
+// Validar configuración de Cloudinary
 exports.validateCloudinaryConfig = async (req, res) => {
   try {
+    console.log('🔍 Validando configuración de Cloudinary...');
+    
     validateCloudinaryConfig();
     
     // Hacer una prueba simple con Cloudinary
