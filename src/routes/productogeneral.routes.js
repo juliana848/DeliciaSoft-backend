@@ -1,11 +1,15 @@
+// routes/productogeneral.js
 const express = require('express');
 const router = express.Router();
-const controller = require('../controllers/productogeneral.controller');
+const productogeneralController = require('../controllers/productogeneral.controller');
 
-router.get('/', controller.getAll);
-router.get('/:id', controller.getById);
-router.post('/', controller.create);
-router.put('/:id', controller.update);
-router.delete('/:id', controller.remove);
+
+router.get('/', productogeneralController.getAll);
+router.get('/estadisticas', productogeneralController.getEstadisticas);
+router.get('/:id', productogeneralController.getById);
+router.post('/', productogeneralController.create);
+router.put('/:id', productogeneralController.update);
+router.delete('/:id', productogeneralController.remove);
+router.patch('/:id/toggle-estado', productogeneralController.toggleEstado);
 
 module.exports = router;
