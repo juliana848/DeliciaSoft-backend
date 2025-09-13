@@ -26,7 +26,33 @@ router.get('/', imagenesController.getAll);
 router.get('/estadisticas', imagenesController.getEstadisticas);
 router.get('/validate-config', imagenesController.validateCloudinaryConfig);
 router.get('/:id', imagenesController.getById);
-router.post('/upload', upload.single('image'), imagenesController.uploadImage);
+
+// ✅ CORREGIDO: Aceptar tanto 'image' como 'imagen' para compatibilidad
+router.post('/upload', (req, res, next) => {
+  // Middleware personalizado para manejar ambos campos
+  const uploadMiddleware = upload.fields([
+    { name: 'image', maxCount: 1 },
+    { name: 'imagen', maxCount: 1 }
+  ]);
+  
+  uploadMiddleware(req, res, (err) => {
+    if (err) {
+      return next(err);
+    }
+    
+    // Normalizar el archivo independientemente del campo usado
+    if (req.files) {
+      if (req.files.image) {
+        req.file = req.files.image[0];
+      } else if (req.files.imagen) {
+        req.file = req.files.imagen[0];
+      }
+    }
+    
+    next();
+  });
+}, imagenesController.uploadImage);
+
 router.post('/save-url', imagenesController.saveUrl);
 router.put('/:id', imagenesController.update);
 router.delete('/:id', imagenesController.remove);
