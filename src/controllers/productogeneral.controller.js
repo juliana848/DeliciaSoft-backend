@@ -10,7 +10,7 @@ exports.getAll = async (req, res) => {
       include: {
         categoriaproducto: {
           select: {
-            nombre: true
+            nombrecategoria: true // ✅ Cambiado de 'nombre' a 'nombrecategoria'
           }
         },
         imagenes: {
@@ -26,7 +26,7 @@ exports.getAll = async (req, res) => {
         }
       },
       orderBy: {
-        idproductogeneral: 'desc' // Mostrar los más recientes primero
+        idproductogeneral: 'desc'
       }
     });
 
@@ -35,7 +35,7 @@ exports.getAll = async (req, res) => {
     // Transformar datos para el frontend
     const productosTransformados = productos.map(producto => ({
       ...producto,
-      categoria: producto.categoriaproducto?.nombre || 'Sin categoría',
+      categoria: producto.categoriaproducto?.nombrecategoria || 'Sin categoría', // ✅ Actualizado
       urlimagen: producto.imagenes?.urlimg || null,
       nombrereceta: producto.receta?.nombrereceta || null,
       especificacionesreceta: producto.receta?.especificaciones || null
@@ -70,7 +70,7 @@ exports.getById = async (req, res) => {
       include: {
         categoriaproducto: {
           select: {
-            nombre: true
+            nombrecategoria: true // ✅ Cambiado
           }
         },
         imagenes: {
@@ -96,7 +96,7 @@ exports.getById = async (req, res) => {
     // Transformar datos para el frontend
     const productoTransformado = {
       ...producto,
-      categoria: producto.categoriaproducto?.nombre || 'Sin categoría',
+      categoria: producto.categoriaproducto?.nombrecategoria || 'Sin categoría', // ✅ Actualizado
       urlimagen: producto.imagenes?.urlimg || null,
       nombrereceta: producto.receta?.nombrereceta || null,
       especificacionesreceta: producto.receta?.especificaciones || null
@@ -228,7 +228,7 @@ exports.create = async (req, res) => {
       include: {
         categoriaproducto: {
           select: {
-            nombre: true
+            nombrecategoria: true // ✅ Cambiado
           }
         },
         imagenes: {
@@ -248,7 +248,7 @@ exports.create = async (req, res) => {
     // Transformar respuesta
     const productoRespuesta = {
       ...nuevoProducto,
-      categoria: nuevoProducto.categoriaproducto?.nombre || 'Sin categoría',
+      categoria: nuevoProducto.categoriaproducto?.nombrecategoria || 'Sin categoría', // ✅ Actualizado
       urlimagen: nuevoProducto.imagenes?.urlimg || null,
       nombrereceta: nuevoProducto.receta?.nombrereceta || null,
       especificacionesreceta: nuevoProducto.receta?.especificaciones || null
@@ -427,7 +427,7 @@ exports.update = async (req, res) => {
       include: {
         categoriaproducto: {
           select: {
-            nombre: true
+            nombrecategoria: true // ✅ Cambiado
           }
         },
         imagenes: {
@@ -447,7 +447,7 @@ exports.update = async (req, res) => {
     // Transformar respuesta
     const productoRespuesta = {
       ...productoActualizado,
-      categoria: productoActualizado.categoriaproducto?.nombre || 'Sin categoría',
+      categoria: productoActualizado.categoriaproducto?.nombrecategoria || 'Sin categoría', // ✅ Actualizado
       urlimagen: productoActualizado.imagenes?.urlimg || null,
       nombrereceta: productoActualizado.receta?.nombrereceta || null,
       especificacionesreceta: productoActualizado.receta?.especificaciones || null
@@ -597,21 +597,36 @@ exports.getEstadisticas = async (req, res) => {
         by: ['idcategoriaproducto'],
         _count: {
           idproductogeneral: true
-        },
-        include: {
-          categoriaproducto: {
-            select: { nombre: true }
-          }
         }
       })
     ]);
+
+    // Para obtener los nombres de categorías, necesitamos hacer consultas adicionales
+    const categoriasConNombres = await Promise.all(
+      categorias.map(async (cat) => {
+        if (cat.idcategoriaproducto) {
+          const categoria = await prisma.categoriaproducto.findUnique({
+            where: { idcategoriaproducto: cat.idcategoriaproducto },
+            select: { nombrecategoria: true } // ✅ Cambiado
+          });
+          return {
+            ...cat,
+            nombreCategoria: categoria?.nombrecategoria || 'Sin nombre'
+          };
+        }
+        return {
+          ...cat,
+          nombreCategoria: 'Sin categoría'
+        };
+      })
+    );
 
     const estadisticas = {
       totalProductos,
       productosActivos,
       productosInactivos,
       porcentajeActivos: totalProductos > 0 ? ((productosActivos / totalProductos) * 100).toFixed(2) : 0,
-      productosPorCategoria: categorias
+      productosPorCategoria: categoriasConNombres
     };
 
     console.log('✅ Estadísticas generadas:', estadisticas);
