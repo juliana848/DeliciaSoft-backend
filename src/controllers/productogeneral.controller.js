@@ -10,7 +10,7 @@ exports.getAll = async (req, res) => {
       include: {
         categoriaproducto: {
           select: {
-            nombrecategoria: true // ✅ Cambiado de 'nombre' a 'nombrecategoria'
+            nombrecategoria: true
           }
         },
         imagenes: {
@@ -32,10 +32,9 @@ exports.getAll = async (req, res) => {
 
     console.log(`✅ Se encontraron ${productos.length} productos`);
 
-    // Transformar datos para el frontend
     const productosTransformados = productos.map(producto => ({
       ...producto,
-      categoria: producto.categoriaproducto?.nombrecategoria || 'Sin categoría', // ✅ Actualizado
+      categoria: producto.categoriaproducto?.nombrecategoria || 'Sin categoría',
       urlimagen: producto.imagenes?.urlimg || null,
       nombrereceta: producto.receta?.nombrereceta || null,
       especificacionesreceta: producto.receta?.especificaciones || null
@@ -579,6 +578,215 @@ exports.toggleEstado = async (req, res) => {
     console.error('❌ Error al cambiar estado:', error);
     res.status(500).json({ 
       message: 'Error al cambiar estado del producto', 
+      error: error.message 
+    });
+  }
+};
+
+exports.getProductosMasVendidos = async (req, res) => {
+  try {
+    console.log('🏆 Obteniendo productos más vendidos...');
+    
+    const limit = parseInt(req.query.limit) || 6; // Por defecto 6 productos
+    
+    // Obtener productos más vendidos basado en detalles de venta
+    const productosMasVendidos = await prisma.detalleventa.groupBy({
+      by: ['idproductogeneral'],
+      _sum: {
+        cantidad: true
+      },
+      _count: {
+        iddetalleventa: true
+      },
+      orderBy: {
+        _sum: {
+          cantidad: 'desc'
+        }
+      },
+      take: limit
+    });
+
+    console.log('Productos agrupados por ventas:', productosMasVendidos);
+
+    // Si no hay ventas, obtener productos activos aleatorios
+    if (productosMasVendidos.length === 0) {
+      console.log('No hay ventas registradas, obteniendo productos activos...');
+      const productosAleatorios = await prisma.productogeneral.findMany({
+        where: { estado: true },
+        include: {
+          categoriaproducto: {
+            select: {
+              nombrecategoria: true
+            }
+          },
+          imagenes: {
+            select: {
+              urlimg: true
+            }
+          },
+          receta: {
+            select: {
+              nombrereceta: true,
+              especificaciones: true
+            }
+          }
+        },
+        take: limit,
+        orderBy: {
+          idproductogeneral: 'desc'
+        }
+      });
+
+      const productosTransformados = productosAleatorios.map(producto => ({
+        ...producto,
+        categoria: producto.categoriaproducto?.nombrecategoria || 'Sin categoría',
+        urlimagen: producto.imagenes?.urlimg || null,
+        nombrereceta: producto.receta?.nombrereceta || null,
+        especificacionesreceta: producto.receta?.especificaciones || null,
+        totalVendido: 0,
+        vecesVendido: 0,
+        esDestacado: true
+      }));
+
+      return res.json({
+        message: 'Productos destacados (sin ventas registradas)',
+        productos: productosTransformados
+      });
+    }
+
+    // Obtener detalles completos de los productos más vendidos
+    const idsProductos = productosMasVendidos.map(p => p.idproductogeneral);
+    
+    const productosCompletos = await prisma.productogeneral.findMany({
+      where: { 
+        idproductogeneral: { in: idsProductos },
+        estado: true // Solo productos activos
+      },
+      include: {
+        categoriaproducto: {
+          select: {
+            nombrecategoria: true
+          }
+        },
+        imagenes: {
+          select: {
+            urlimg: true
+          }
+        },
+        receta: {
+          select: {
+            nombrereceta: true,
+            especificaciones: true
+          }
+        }
+      }
+    });
+
+    // Combinar datos de ventas con detalles del producto
+    const productosDestacados = productosMasVendidos.map(ventaData => {
+      const producto = productosCompletos.find(p => p.idproductogeneral === ventaData.idproductogeneral);
+      
+      if (!producto) return null;
+      
+      return {
+        ...producto,
+        categoria: producto.categoriaproducto?.nombrecategoria || 'Sin categoría',
+        urlimagen: producto.imagenes?.urlimg || null,
+        nombrereceta: producto.receta?.nombrereceta || null,
+        especificacionesreceta: producto.receta?.especificaciones || null,
+        totalVendido: ventaData._sum.cantidad || 0,
+        vecesVendido: ventaData._count.iddetalleventa || 0,
+        esDestacado: true
+      };
+    }).filter(Boolean);
+
+    console.log(`✅ ${productosDestacados.length} productos más vendidos encontrados`);
+
+    res.json({
+      message: 'Productos más vendidos obtenidos exitosamente',
+      productos: productosDestacados
+    });
+
+  } catch (error) {
+    console.error('❌ Error al obtener productos más vendidos:', error);
+    res.status(500).json({ 
+      message: 'Error al obtener productos más vendidos', 
+      error: error.message,
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+};
+
+// Obtener estadísticas de productos más vendidos
+exports.getEstadisticasVentas = async (req, res) => {
+  try {
+    console.log('📈 Generando estadísticas de ventas de productos...');
+
+    const fechaInicio = req.query.fechaInicio ? new Date(req.query.fechaInicio) : null;
+    const fechaFin = req.query.fechaFin ? new Date(req.query.fechaFin) : null;
+    
+    let whereCondition = {};
+    
+    if (fechaInicio && fechaFin) {
+      whereCondition = {
+        venta: {
+          fechaventa: {
+            gte: fechaInicio,
+            lte: fechaFin
+          }
+        }
+      };
+    }
+
+    const [
+      totalVentas,
+      ventasPorProducto,
+      ingresosPorProducto
+    ] = await Promise.all([
+      // Total de productos vendidos
+      prisma.detalleventa.aggregate({
+        where: whereCondition,
+        _sum: { cantidad: true },
+        _count: { iddetalleventa: true }
+      }),
+      
+      // Ventas por producto (cantidad)
+      prisma.detalleventa.groupBy({
+        by: ['idproductogeneral'],
+        where: whereCondition,
+        _sum: { cantidad: true },
+        _count: { iddetalleventa: true },
+        orderBy: { _sum: { cantidad: 'desc' } },
+        take: 10
+      }),
+      
+      // Ingresos por producto
+      prisma.detalleventa.groupBy({
+        by: ['idproductogeneral'],
+        where: whereCondition,
+        _sum: { subtotal: true },
+        orderBy: { _sum: { subtotal: 'desc' } },
+        take: 10
+      })
+    ]);
+
+    const estadisticas = {
+      resumen: {
+        totalProductosVendidos: totalVentas._sum.cantidad || 0,
+        totalTransacciones: totalVentas._count.iddetalleventa || 0,
+        fechaConsulta: fechaInicio && fechaFin ? { inicio: fechaInicio, fin: fechaFin } : 'Histórico'
+      },
+      topVentasCantidad: ventasPorProducto,
+      topVentasIngresos: ingresosPorProducto
+    };
+
+    console.log('✅ Estadísticas generadas:', estadisticas.resumen);
+    res.json(estadisticas);
+
+  } catch (error) {
+    console.error('❌ Error al generar estadísticas:', error);
+    res.status(500).json({ 
+      message: 'Error al obtener estadísticas de ventas', 
       error: error.message 
     });
   }

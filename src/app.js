@@ -45,9 +45,6 @@ app.use('/api/categorias-productos', categoriaProductosRoutes);
 const estadoventaRoutes = require('./routes/estadoventa.routes');
 app.use('/api/estado-venta', estadoventaRoutes); 
 
-const imagenesRoutes = require('./routes/imagenes.routes');
-app.use('/api/imagenes', imagenesRoutes);
-
 const insumosRoutes = require('./routes/insumos.routes');
 app.use('/api/insumos', insumosRoutes);
 
@@ -89,6 +86,10 @@ app.use('/api/usuarios', usuariosRoutes);
 
 const ventaRoutes = require('./routes/venta.routes');
 app.use('/api/venta', ventaRoutes);
+
+const imagenesRoutes = require('./routes/imagenes.routes');
+app.use('/api/imagenes', imagenesRoutes);
+
 
 const contactoRoutes = require('./routes/contacto.routes');
 app.use('/api/contacto', contactoRoutes);
