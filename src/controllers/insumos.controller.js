@@ -86,6 +86,28 @@ exports.create = async (req, res) => {
   }
 };
 
+exports.sumarCantidad = async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const { cantidad } = req.body;
+
+    if (cantidad === undefined || isNaN(cantidad)) {
+      return res.status(400).json({ message: "Debe enviar una cantidad válida" });
+    }
+
+    const insumoActualizado = await prisma.insumos.update({
+      where: { idinsumo: id },
+      data: {
+        cantidad: { increment: parseFloat(cantidad) } 
+      },
+    });
+
+    res.json(insumoActualizado);
+  } catch (error) {
+    res.status(500).json({ message: "Error al sumar cantidad", error });
+ }
+};
+
 // Actualizar insumo (SIN CAMBIOS - FUNCIONA BIEN)
 exports.update = async (req, res) => {
   try {
