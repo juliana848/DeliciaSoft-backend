@@ -3,14 +3,14 @@ const jwt = require('jsonwebtoken');
 const nodemailer = require('nodemailer');
 
 const prisma = new PrismaClient();
-const verificationCodes = {}; // Memoria temporal
+const verificationCodes = {}; 
 
 // CONFIGURACIÓN CORRECTA DEL TRANSPORTER
-const transporter = nodemailer.createTransporter({
+const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
     user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS // Debe ser la contraseña de aplicación de Gmail
+    pass: process.env.EMAIL_PASS 
   }
 });
 
