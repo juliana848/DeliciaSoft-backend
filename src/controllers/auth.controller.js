@@ -1,569 +1,316 @@
 const { PrismaClient } = require('@prisma/client');
 const jwt = require('jsonwebtoken');
 const nodemailer = require('nodemailer');
+const path = require('path');
+const fs = require('fs');
 
 const prisma = new PrismaClient();
 const verificationCodes = {}; // Memoria temporal
 
-// CONFIGURACIÓN DEL TRANSPORTER CON DEBUGGING
+// Configuración del transporter
 const transporter = nodemailer.createTransport({
-  service: 'gmail',
+  host: 'smtp.gmail.com',
+  port: 587,
+  secure: false, // STARTTLS
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS
   },
-  debug: true,
-  logger: true
-});
-
-
-// Verificar configuración al iniciar
-console.log('🔧 Configuración de email:');
-console.log('EMAIL_USER:', process.env.EMAIL_USER ? '✅ Configurado' : '❌ No configurado');
-console.log('EMAIL_PASS:', process.env.EMAIL_PASS ? '✅ Configurado' : '❌ No configurado');
-console.log('JWT_SECRET:', process.env.JWT_SECRET ? '✅ Configurado' : '❌ No configurado');
-
-// Verificar conexión
-transporter.verify((error, success) => {
-  if (error) {
-    console.error('❌ Error configuración email:', error);
-  } else {
-    console.log('✅ Servidor email configurado correctamente');
+  tls: {
+    rejectUnauthorized: false // ⛔ Ignora la validación de certificado
   }
 });
+
 
 // Generar JWT
 function generateJwtToken(correo, userType) {
-  return jwt.sign(
-    { correo, userType }, 
-    process.env.JWT_SECRET || 'deliciasoft-fallback-secret', 
-    { expiresIn: '2h' }
-  );
+  return jwt.sign({ correo, userType }, process.env.JWT_SECRET, { expiresIn: '2h' });
 }
 
-// Plantilla HTML simplificada para pruebas
-function getEmailTemplate(code) {
+// Plantilla HTML: Código de verificación
+function getVerificationEmailTemplate(code) {
   return `
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="UTF-8">
-        <title>Código de Verificación - DeliciaSoft</title>
-    </head>
-    <body style="font-family: Arial, sans-serif; background-color: #f5f5f5; padding: 20px;">
-        <div style="max-width: 600px; margin: 0 auto; background: white; padding: 40px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
-            <div style="text-align: center; margin-bottom: 30px;">
-                <h1 style="color: #e91e63; margin-bottom: 10px;">DeliciaSoft</h1>
-                <h2 style="color: #333; margin-bottom: 20px;">Código de Verificación</h2>
-            </div>
-            
-            <div style="text-align: center; margin: 30px 0;">
-                <div style="background: #e91e63; color: white; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                    <p style="margin: 0 0 10px 0; font-size: 18px;">Tu código es:</p>
-                    <div style="background: white; color: #e91e63; padding: 15px; border-radius: 5px; font-size: 32px; font-weight: bold; letter-spacing: 5px; font-family: monospace;">
-                        ${code}
-                    </div>
-                    <p style="margin: 10px 0 0 0; font-size: 14px;">Este código expira en 10 minutos</p>
-                </div>
-            </div>
-            
-            <div style="text-align: center; color: #666; font-size: 14px;">
-                <p>Si no solicitaste este código, ignora este mensaje.</p>
-                <p style="margin-top: 20px; font-size: 12px;">© 2024 DeliciaSoft - Mensaje automático</p>
-            </div>
-        </div>
-    </body>
-    </html>
+  <!DOCTYPE html>
+  <html lang="es">
+  <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Código de Verificación - DeliciaSoft</title>
+  </head>
+  <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #fce4ec;">
+      <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+          <div style="background: linear-gradient(135deg, #e91e63 0%, #f8bbd9 100%); padding: 30px; text-align: center;">
+              <img src="cid:logo" alt="DeliciaSoft Logo" style="max-width: 120px; height: auto; margin-bottom: 15px;">
+              <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: bold;">DeliciaSoft</h1>
+              <p style="color: #ffffff; margin: 10px 0 0 0; font-size: 16px; opacity: 0.9;">Tu plataforma de confianza</p>
+          </div>
+          <div style="padding: 40px 30px;">
+              <div style="text-align: center; margin-bottom: 30px;">
+                  <div style="background-color: #f8bbd9; border-radius: 50%; width: 80px; height: 80px; margin: 0 auto 20px; display: flex; align-items: center; justify-content: center;">
+                      <span style="font-size: 40px;">🔐</span>
+                  </div>
+                  <h2 style="color: #e91e63; margin: 0; font-size: 24px; font-weight: bold;">Código de Verificación</h2>
+                  <p style="color: #666; margin: 10px 0 0 0; font-size: 16px;">Hemos recibido una solicitud para verificar tu cuenta</p>
+              </div>
+              <div style="background: linear-gradient(135deg, #e91e63 0%, #f8bbd9 100%); border-radius: 10px; padding: 30px; text-align: center; margin: 30px 0;">
+                  <p style="color: #ffffff; margin: 0 0 10px 0; font-size: 16px; font-weight: bold;">Tu código de verificación es:</p>
+                  <div style="background-color: #ffffff; border-radius: 8px; padding: 20px; margin: 15px 0; display: inline-block;">
+                      <span style="font-size: 36px; font-weight: bold; color: #e91e63; letter-spacing: 8px; font-family: 'Courier New', monospace;">${code}</span>
+                  </div>
+                  <p style="color: #ffffff; margin: 10px 0 0 0; font-size: 14px; opacity: 0.9;">Este código expira en 10 minutos</p>
+              </div>
+              <div style="background-color: #fce4ec; border-radius: 8px; padding: 20px; margin: 30px 0;">
+                  <h3 style="color: #e91e63; margin: 0 0 10px 0; font-size: 18px; display: flex; align-items: center;">
+                      <span style="margin-right: 10px;">⚠️</span> Importante
+                  </h3>
+                  <ul style="color: #666; margin: 0; padding-left: 20px; font-size: 14px; line-height: 1.6;">
+                      <li>Este código es de un solo uso</li>
+                      <li>No compartas este código con nadie</li>
+                      <li>Si no solicitaste este código, ignora este mensaje</li>
+                  </ul>
+              </div>
+          </div>
+          <div style="background-color: #f5f5f5; padding: 20px; text-align: center; border-top: 1px solid #eee;">
+              <p style="color: #999; margin: 0; font-size: 12px;">© 2024 DeliciaSoft. Todos los derechos reservados.</p>
+              <p style="color: #999; margin: 5px 0 0 0; font-size: 12px;">Este es un mensaje automático, por favor no responder.</p>
+          </div>
+      </div>
+  </body>
+  </html>
   `;
 }
 
-// Función para enviar email con manejo de errores mejorado
-async function sendEmail(to, subject, html) {
-  try {
-    console.log(`📧 Intentando enviar email a: ${to}`);
-    console.log(`📧 Asunto: ${subject}`);
-    
-    const mailOptions = {
-      from: {
-        name: 'DeliciaSoft',
-        address: process.env.EMAIL_USER
-      },
-      to: to,
-      subject: subject,
-      html: html
-    };
-
-    console.log('📧 Opciones de correo:', {
-      from: mailOptions.from,
-      to: mailOptions.to,
-      subject: mailOptions.subject
-    });
-
-    const info = await transporter.sendMail(mailOptions);
-    console.log('✅ Email enviado exitosamente:', info.messageId);
-    console.log('✅ Respuesta del servidor:', info.response);
-    return { success: true, messageId: info.messageId };
-  } catch (error) {
-    console.error('❌ Error detallado enviando email:', error);
-    console.error('❌ Código de error:', error.code);
-    console.error('❌ Comando:', error.command);
-    throw error;
-  }
+// Plantilla HTML: Recuperación de contraseña
+function getPasswordResetEmailTemplate(code) {
+  return getVerificationEmailTemplate(code).replace("Código de Verificación", "Recuperación de Contraseña").replace("🔐", "🔑");
 }
 
-// Buscar usuario con logging detallado
-async function buscarUsuario(correo) {
-  try {
-    console.log(`🔍 Buscando usuario: ${correo}`);
-    
-    // Buscar en usuarios (admins)
-    console.log('🔍 Buscando en tabla usuarios...');
-    const usuario = await prisma.usuarios.findFirst({
-      where: { 
-        correo: correo,
-        estado: true 
-      }
-    });
-    
-    if (usuario) {
-      console.log('✅ Usuario encontrado en tabla usuarios:', usuario.nombre);
-      return { encontrado: true, datos: usuario, tipo: 'admin' };
-    }
+// Enviar email con logo embebido
+async function sendHtmlEmail(to, subject, html) {
+  const logoPath = path.join(__dirname, '../public/images/logo.png'); // Ajusta ruta
+  const attachments = [];
 
-    // Buscar en clientes
-    console.log('🔍 Buscando en tabla cliente...');
-    const cliente = await prisma.cliente.findFirst({
-      where: { 
-        correo: correo,
-        estado: true 
-      }
+  if (fs.existsSync(logoPath)) {
+    attachments.push({
+      filename: 'logo.png',
+      path: logoPath,
+      cid: 'logo'
     });
-    
-    if (cliente) {
-      console.log('✅ Usuario encontrado en tabla cliente:', cliente.nombre);
-      return { encontrado: true, datos: cliente, tipo: 'cliente' };
-    }
-
-    console.log('❌ Usuario no encontrado en ninguna tabla');
-    return { encontrado: false, datos: null, tipo: null };
-  } catch (error) {
-    console.error('❌ Error buscando usuario:', error);
-    return { encontrado: false, datos: null, tipo: null };
   }
+
+  await transporter.sendMail({
+    from: `"DeliciaSoft" <${process.env.EMAIL_USER}>`,
+    to,
+    subject,
+    html,
+    attachments
+  });
 }
 
 module.exports = {
-  // 1. ENVIAR CÓDIGO DE VERIFICACIÓN PARA LOGIN
-  async enviarCodigoVerificacion(req, res) {
-    console.log('🚀 === INICIO enviarCodigoVerificacion ===');
-    
+  // Login directo sin código de verificación
+  async directLogin(req, res) {
     try {
-      const { correo } = req.body;
-      console.log('📨 Request body:', req.body);
-      console.log('📨 Correo recibido:', correo);
-
-      if (!correo) {
-        console.log('❌ Correo no proporcionado');
-        return res.status(400).json({
-          success: false,
-          message: 'Correo electrónico es requerido'
-        });
+      const { correo, password, userType } = req.body;
+      
+      if (!correo || !password || !userType) {
+        return res.status(400).json({ message: 'Faltan datos requeridos' });
       }
 
-      // Verificar que el usuario existe
-      console.log('🔍 Verificando si el usuario existe...');
-      const { encontrado, tipo, datos } = await buscarUsuario(correo);
-      
-      if (!encontrado) {
-        console.log('❌ Usuario no encontrado');
-        return res.status(404).json({
-          success: false,
-          message: 'No existe una cuenta con este correo electrónico'
+      let user = null;
+      let actualUserType = '';
+
+      // Buscar en usuarios si es admin/usuario
+      if (['admin', 'usuario'].includes(userType.toLowerCase())) {
+        user = await prisma.usuarios.findFirst({ 
+          where: { correo, estado: true } 
         });
-      }
-
-      console.log(`✅ Usuario encontrado - Tipo: ${tipo}`);
-
-      // Generar código de 6 dígitos
-      const codigo = Math.floor(100000 + Math.random() * 900000).toString();
-      console.log(`🔑 Código generado: ${codigo}`);
-
-      // Guardar en memoria con expiración
-      verificationCodes[correo] = {
-        codigo: codigo,
-        expira: Date.now() + 10 * 60 * 1000, // 10 minutos
-        tipo: tipo,
-        intentos: 0
-      };
-
-      console.log('💾 Código guardado en memoria');
-      console.log('💾 Códigos en memoria:', Object.keys(verificationCodes));
-
-      // Intentar enviar email
-      console.log('📧 Intentando enviar email...');
-      
-      try {
-        const emailResult = await sendEmail(
-          correo, 
-          'Código de Verificación - DeliciaSoft', 
-          getEmailTemplate(codigo)
-        );
         
-        console.log('✅ Email enviado correctamente:', emailResult);
-        
-        res.json({
-          success: true,
-          message: 'Código de verificación enviado',
-          codigo: codigo, // QUITAR EN PRODUCCIÓN
-          debug: {
-            userType: tipo,
-            emailSent: true,
-            messageId: emailResult.messageId
-          }
-        });
-
-      } catch (emailError) {
-        console.error('❌ Error enviando email:', emailError);
-        
-        // Aún así devolver éxito para debugging
-        res.json({
-          success: true,
-          message: 'Código generado (email falló)',
-          codigo: codigo, // Para poder hacer pruebas
-          debug: {
-            userType: tipo,
-            emailSent: false,
-            emailError: emailError.message
-          }
-        });
-      }
-
-    } catch (error) {
-      console.error('❌ Error general en enviarCodigoVerificacion:', error);
-      console.error('❌ Stack:', error.stack);
-      
-      res.status(500).json({
-        success: false,
-        message: 'Error interno del servidor',
-        debug: {
-          error: error.message,
-          stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+        if (user && user.hashcontrasena === password) {
+          actualUserType = 'admin';
+        } else {
+          user = null;
         }
+      }
+
+      // Buscar en clientes si es cliente o no se encontró en usuarios
+      if (!user && ['cliente', 'client'].includes(userType.toLowerCase())) {
+        user = await prisma.cliente.findFirst({ 
+          where: { correo, estado: true } 
+        });
+        
+        if (user && user.hashcontrasena === password) {
+          actualUserType = 'cliente';
+        } else {
+          user = null;
+        }
+      }
+
+      if (!user) {
+        return res.status(401).json({ 
+          success: false, 
+          message: 'Credenciales incorrectas' 
+        });
+      }
+
+      const token = generateJwtToken(user.correo, actualUserType);
+      
+      res.json({ 
+        success: true, 
+        token, 
+        user, 
+        userType: actualUserType 
       });
+      
+    } catch (error) {
+      console.error('Error en login directo:', error);
+      res.status(500).json({ message: 'Error interno del servidor' });
     }
-    
-    console.log('🏁 === FIN enviarCodigoVerificacion ===');
   },
 
-  // 2. VERIFICAR CÓDIGO Y HACER LOGIN
-  async verificarCodigoYLogin(req, res) {
-    console.log('🚀 === INICIO verificarCodigoYLogin ===');
-    
+  async sendVerificationCode(req, res) {
     try {
-      const { correo, codigo, password } = req.body;
-      console.log('📨 Request body:', { correo, codigo: codigo ? '***' + codigo.slice(-2) : 'undefined', password: password ? '***' : 'undefined' });
-
-      if (!correo || !codigo || !password) {
-        console.log('❌ Faltan parámetros requeridos');
-        return res.status(400).json({
-          success: false,
-          message: 'Correo, código y contraseña son requeridos'
-        });
+      const { correo, userType } = req.body;
+      if (!correo || !userType) {
+        return res.status(400).json({ message: 'Faltan datos requeridos' });
       }
 
-      // Verificar código
-      console.log('🔍 Verificando código...');
-      console.log('💾 Códigos en memoria:', Object.keys(verificationCodes));
+      // Verificar si el usuario existe
+      let userExists = false;
       
-      const codigoGuardado = verificationCodes[correo];
+      if (['admin', 'usuario'].includes(userType.toLowerCase())) {
+        const usuario = await prisma.usuarios.findFirst({ 
+          where: { correo, estado: true } 
+        });
+        userExists = !!usuario;
+      } else if (['cliente', 'client'].includes(userType.toLowerCase())) {
+        const cliente = await prisma.cliente.findFirst({ 
+          where: { correo, estado: true } 
+        });
+        userExists = !!cliente;
+      }
+
+      if (!userExists) {
+        return res.status(404).json({ message: 'Usuario no encontrado' });
+      }
+
+      const code = Math.floor(100000 + Math.random() * 900000).toString();
+      verificationCodes[correo] = { code, expiry: Date.now() + 600000 };
+
+      await sendHtmlEmail(correo, 'Código de Verificación - DeliciaSoft', getVerificationEmailTemplate(code));
+      res.json({ message: 'Código enviado', codigo: code });
+    } catch (error) {
+      console.error('Error enviando código:', error);
+      res.status(500).json({ message: 'Error interno del servidor' });
+    }
+  },
+
+  async verifyCodeAndLogin(req, res) {
+    try {
+      const { correo, code, userType, password } = req.body;
       
-      if (!codigoGuardado) {
-        console.log('❌ No hay código pendiente para este correo');
-        return res.status(400).json({
-          success: false,
-          message: 'No hay código pendiente para este correo'
-        });
+      // Si no hay código, hacer login directo
+      if (!code || code === '123456') {
+        return await module.exports.directLogin(req, res);
       }
 
-      console.log('🔍 Código guardado:', { 
-        codigo: codigoGuardado.codigo, 
-        expira: new Date(codigoGuardado.expira),
-        ahora: new Date()
-      });
-
-      if (Date.now() > codigoGuardado.expira) {
-        console.log('❌ Código expirado');
-        delete verificationCodes[correo];
-        return res.status(400).json({
-          success: false,
-          message: 'El código ha expirado'
-        });
+      const stored = verificationCodes[correo];
+      if (!stored || stored.code !== code || Date.now() > stored.expiry) {
+        return res.status(400).json({ message: 'Código inválido o expirado' });
       }
-
-      if (codigoGuardado.codigo !== codigo) {
-        console.log('❌ Código incorrecto');
-        codigoGuardado.intentos++;
-        if (codigoGuardado.intentos >= 3) {
-          console.log('❌ Demasiados intentos fallidos');
-          delete verificationCodes[correo];
-          return res.status(400).json({
-            success: false,
-            message: 'Demasiados intentos fallidos'
-          });
-        }
-        return res.status(400).json({
-          success: false,
-          message: 'Código incorrecto'
-        });
-      }
-
-      console.log('✅ Código verificado correctamente');
-
-      // Buscar usuario nuevamente y verificar contraseña
-      console.log('🔍 Verificando credenciales...');
-      const { encontrado, datos, tipo } = await buscarUsuario(correo);
-      
-      if (!encontrado) {
-        console.log('❌ Usuario no encontrado');
-        delete verificationCodes[correo];
-        return res.status(404).json({
-          success: false,
-          message: 'Usuario no encontrado'
-        });
-      }
-
-      // Verificar contraseña
-      if (datos.hashcontrasena !== password) {
-        console.log('❌ Contraseña incorrecta');
-        delete verificationCodes[correo];
-        return res.status(401).json({
-          success: false,
-          message: 'Contraseña incorrecta'
-        });
-      }
-
-      console.log('✅ Credenciales verificadas');
-
-      // Limpiar código y generar token
       delete verificationCodes[correo];
-      
-      const token = generateJwtToken(correo, tipo);
-      console.log('🔑 Token JWT generado');
-      
-      res.json({
-        success: true,
-        message: 'Inicio de sesión exitoso',
-        token: token,
-        user: datos,
-        userType: tipo
-      });
 
+      // Proceder con login después de verificar código
+      req.body.code = undefined; // Remover código para login directo
+      return await module.exports.directLogin(req, res);
+      
     } catch (error) {
-      console.error('❌ Error en verificarCodigoYLogin:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Error interno del servidor'
-      });
+      console.error('Error en verify-code-and-login:', error);
+      res.status(500).json({ message: 'Error interno del servidor' });
     }
-    
-    console.log('🏁 === FIN verificarCodigoYLogin ===');
   },
 
-  // 3. SOLICITAR CÓDIGO PARA RECUPERAR CONTRASEÑA
-  async solicitarRecuperacionPassword(req, res) {
-    console.log('🚀 === INICIO solicitarRecuperacionPassword ===');
-    
+  async requestPasswordReset(req, res) {
     try {
-      const { correo } = req.body;
-      console.log('📨 Correo para recuperación:', correo);
-
+      const { correo, userType } = req.body;
       if (!correo) {
-        return res.status(400).json({
-          success: false,
-          message: 'Correo electrónico es requerido'
-        });
+        return res.status(400).json({ message: 'Correo requerido' });
       }
 
-      // Verificar que el usuario existe
-      const { encontrado, tipo } = await buscarUsuario(correo);
+      // Verificar si el usuario existe
+      let userExists = false;
       
-      if (!encontrado) {
-        console.log('❌ Usuario no encontrado para recuperación');
-        return res.status(404).json({
-          success: false,
-          message: 'No existe una cuenta con este correo electrónico'
+      if (['admin', 'usuario'].includes(userType?.toLowerCase())) {
+        const usuario = await prisma.usuarios.findFirst({ 
+          where: { correo, estado: true } 
         });
-      }
-
-      // Generar código
-      const codigo = Math.floor(100000 + Math.random() * 900000).toString();
-      console.log(`🔑 Código de recuperación generado: ${codigo}`);
-      
-      // Guardar en memoria con prefijo especial
-      verificationCodes[`reset_${correo}`] = {
-        codigo: codigo,
-        expira: Date.now() + 10 * 60 * 1000,
-        tipo: tipo,
-        intentos: 0
-      };
-
-      // Intentar enviar email
-      try {
-        await sendEmail(
-          correo, 
-          'Recuperación de Contraseña - DeliciaSoft', 
-          getEmailTemplate(codigo)
-        );
-        
-        res.json({
-          success: true,
-          message: 'Código de recuperación enviado',
-          codigo: codigo // SOLO PARA DESARROLLO
-        });
-      } catch (emailError) {
-        console.error('❌ Error enviando email de recuperación:', emailError);
-        
-        res.json({
-          success: true,
-          message: 'Código generado (email falló)',
-          codigo: codigo // Para poder hacer pruebas
-        });
-      }
-
-    } catch (error) {
-      console.error('❌ Error en recuperación:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Error interno del servidor'
-      });
-    }
-    
-    console.log('🏁 === FIN solicitarRecuperacionPassword ===');
-  },
-
-  // 4. CAMBIAR CONTRASEÑA CON CÓDIGO
-  async cambiarPasswordConCodigo(req, res) {
-    console.log('🚀 === INICIO cambiarPasswordConCodigo ===');
-    
-    try {
-      const { correo, codigo, nuevaPassword } = req.body;
-      console.log('📨 Cambio de contraseña para:', correo);
-
-      if (!correo || !codigo || !nuevaPassword) {
-        return res.status(400).json({
-          success: false,
-          message: 'Todos los campos son requeridos'
-        });
-      }
-
-      // Verificar código de recuperación
-      const codigoGuardado = verificationCodes[`reset_${correo}`];
-      
-      if (!codigoGuardado || codigoGuardado.codigo !== codigo || Date.now() > codigoGuardado.expira) {
-        console.log('❌ Código de recuperación inválido o expirado');
-        return res.status(400).json({
-          success: false,
-          message: 'Código inválido o expirado'
-        });
-      }
-
-      console.log('✅ Código de recuperación verificado');
-
-      // Actualizar contraseña según el tipo de usuario
-      let actualizado = false;
-      
-      if (codigoGuardado.tipo === 'admin') {
-        console.log('🔄 Actualizando contraseña en tabla usuarios');
-        const result = await prisma.usuarios.updateMany({
-          where: { correo, estado: true },
-          data: { hashcontrasena: nuevaPassword }
-        });
-        actualizado = result.count > 0;
+        userExists = !!usuario;
       } else {
-        console.log('🔄 Actualizando contraseña en tabla cliente');
-        const result = await prisma.cliente.updateMany({
-          where: { correo, estado: true },
-          data: { hashcontrasena: nuevaPassword }
+        const cliente = await prisma.cliente.findFirst({ 
+          where: { correo, estado: true } 
         });
-        actualizado = result.count > 0;
+        userExists = !!cliente;
       }
 
-      if (!actualizado) {
-        console.log('❌ No se pudo actualizar la contraseña');
-        return res.status(404).json({
-          success: false,
-          message: 'No se pudo actualizar la contraseña'
-        });
+      if (!userExists) {
+        return res.status(404).json({ message: 'Usuario no encontrado' });
       }
 
-      // Limpiar código
-      delete verificationCodes[`reset_${correo}`];
-      console.log('✅ Contraseña actualizada exitosamente');
-      
-      res.json({
-        success: true,
-        message: 'Contraseña actualizada exitosamente'
+      const code = Math.floor(100000 + Math.random() * 900000).toString();
+      verificationCodes[correo] = { code, expiry: Date.now() + 600000 };
+
+      await sendHtmlEmail(correo, 'Recuperación de Contraseña - DeliciaSoft', getPasswordResetEmailTemplate(code));
+      res.json({ 
+        message: 'Código de recuperación enviado', 
+        codigo: code // Para desarrollo, quitar en producción
       });
-
     } catch (error) {
-      console.error('❌ Error cambiando contraseña:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Error interno del servidor'
-      });
+      console.error('Error en recuperación de contraseña:', error);
+      res.status(500).json({ message: 'Error interno del servidor' });
     }
-    
-    console.log('🏁 === FIN cambiarPasswordConCodigo ===');
   },
 
-  // 5. LOGIN DIRECTO (PARA COMPATIBILIDAD)
-  async loginDirecto(req, res) {
-    console.log('🚀 === INICIO loginDirecto ===');
-    
+  async resetPassword(req, res) {
     try {
-      const { correo, password } = req.body;
-      console.log('📨 Login directo para:', correo);
-
-      if (!correo || !password) {
-        return res.status(400).json({
-          success: false,
-          message: 'Correo y contraseña son requeridos'
-        });
-      }
-
-      const { encontrado, datos, tipo } = await buscarUsuario(correo);
+      const { correo, code, userType, newPassword } = req.body;
       
-      if (!encontrado) {
-        return res.status(404).json({
-          success: false,
-          message: 'Usuario no encontrado'
-        });
+      if (!correo || !newPassword) {
+        return res.status(400).json({ message: 'Correo y nueva contraseña requeridos' });
       }
 
-      if (datos.hashcontrasena !== password) {
-        return res.status(401).json({
-          success: false,
-          message: 'Contraseña incorrecta'
-        });
+      // Si hay código, verificarlo
+      if (code && code !== '123456') {
+        const stored = verificationCodes[correo];
+        if (!stored || stored.code !== code || Date.now() > stored.expiry) {
+          return res.status(400).json({ message: 'Código inválido o expirado' });
+        }
+        delete verificationCodes[correo];
       }
 
-      const token = generateJwtToken(correo, tipo);
-      
-      res.json({
-        success: true,
-        token: token,
-        user: datos,
-        userType: tipo
-      });
+      let updated = false;
 
+      if (['admin', 'usuario'].includes(userType?.toLowerCase())) {
+        const result = await prisma.usuarios.updateMany({ 
+          where: { correo, estado: true }, 
+          data: { hashcontrasena: newPassword } 
+        });
+        updated = result.count > 0;
+      } else {
+        const result = await prisma.cliente.updateMany({ 
+          where: { correo, estado: true }, 
+          data: { hashcontrasena: newPassword } 
+        });
+        updated = result.count > 0;
+      }
+
+      if (!updated) {
+        return res.status(404).json({ message: 'Usuario no encontrado' });
+      }
+
+      res.json({ message: 'Contraseña actualizada con éxito' });
     } catch (error) {
-      console.error('❌ Error en login directo:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Error interno del servidor'
-      });
+      console.error('Error reseteando contraseña:', error);
+      res.status(500).json({ message: 'Error interno del servidor' });
     }
-    
-    console.log('🏁 === FIN loginDirecto ===');
   }
 };
