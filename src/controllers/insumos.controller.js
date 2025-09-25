@@ -1,7 +1,18 @@
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
-// Obtener todos los insumos (SOLUCIONADO)
+// 🔹 Función auxiliar para formatear insumo
+function formatearInsumo(insumo) {
+  if (!insumo) return null;
+  return {
+    ...insumo,
+    cantidad: insumo.cantidad !== null ? Number(insumo.cantidad) : 0,
+    nombreCategoria: insumo.categoriainsumos?.nombrecategoria || "Categoría desconocida",
+    nombreUnidadMedida: insumo.unidadmedida?.nombreunidad || "Unidad desconocida"
+  };
+}
+
+// Obtener todos los insumos
 exports.getAll = async (req, res) => {
   try {
     const insumos = await prisma.insumos.findMany({
@@ -12,22 +23,13 @@ exports.getAll = async (req, res) => {
       }
     });
 
-    // Formatear la respuesta con los nombres correctos de los campos
-    const insumosFormateados = insumos.map(insumo => ({
-      ...insumo,
-      // El campo correcto es 'nombrecategoria' (minúscula)
-      nombreCategoria: insumo.categoriainsumos?.nombrecategoria || "Categoría desconocida",
-      // Ajusta también el campo de unidad de medida según tu base de datos
-      nombreUnidadMedida: insumo.unidadmedida?.nombreunidad || "Unidad desconocida"
-    }));
-
-    res.json(insumosFormateados);
+    res.json(insumos.map(formatearInsumo));
   } catch (error) {
     res.status(500).json({ message: 'Error al obtener insumos', error: error.message });
   }
 };
 
-// Obtener insumo por id (ACTUALIZADO)
+// Obtener insumo por id
 exports.getById = async (req, res) => {
   try {
     const id = parseInt(req.params.id);
@@ -39,23 +41,16 @@ exports.getById = async (req, res) => {
         unidadmedida: true
       }
     });
-    
+
     if (!insumo) return res.status(404).json({ message: 'Insumo no encontrado' });
 
-    // Formatear también el insumo individual
-    const insumoFormateado = {
-      ...insumo,
-      nombreCategoria: insumo.categoriainsumos?.nombrecategoria || "Categoría desconocida",
-      nombreUnidadMedida: insumo.unidadmedida?.nombreunidad || "Unidad desconocida"
-    };
-
-    res.json(insumoFormateado);
+    res.json(formatearInsumo(insumo));
   } catch (error) {
     res.status(500).json({ message: 'Error al obtener insumo', error: error.message });
   }
 };
 
-// Crear nuevo insumo (SIN CAMBIOS - FUNCIONA BIEN)
+// Crear nuevo insumo
 exports.create = async (req, res) => {
   try {
     const {
@@ -76,17 +71,50 @@ exports.create = async (req, res) => {
         fecharegistro: fecharegistro ? new Date(fecharegistro) : null,
         idimagen,
         estado,
-        cantidad: cantidad ? parseFloat(cantidad) : null
+        cantidad: cantidad ? parseFloat(cantidad) : 0
+      },
+      include: {
+        categoriainsumos: true,
+        imagenes: true,
+        unidadmedida: true
       }
     });
 
-    res.status(201).json(nuevoInsumo);
+    res.status(201).json(formatearInsumo(nuevoInsumo));
   } catch (error) {
     res.status(500).json({ message: 'Error al crear insumo', error: error.message });
   }
 };
 
-// Actualizar insumo (SIN CAMBIOS - FUNCIONA BIEN)
+// Sumar cantidad
+exports.sumarCantidad = async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const { cantidad } = req.body;
+
+    if (cantidad === undefined || isNaN(cantidad)) {
+      return res.status(400).json({ message: "Debe enviar una cantidad válida" });
+    }
+
+    const insumoActualizado = await prisma.insumos.update({
+      where: { idinsumo: id },
+      data: {
+        cantidad: { increment: parseFloat(cantidad) }
+      },
+      include: {
+        categoriainsumos: true,
+        imagenes: true,
+        unidadmedida: true
+      }
+    });
+
+    res.json(formatearInsumo(insumoActualizado));
+  } catch (error) {
+    res.status(500).json({ message: "Error al sumar cantidad", error: error.message });
+ }
+};
+
+// Actualizar insumo
 exports.update = async (req, res) => {
   try {
     const id = parseInt(req.params.id);
@@ -112,17 +140,22 @@ exports.update = async (req, res) => {
         fecharegistro: fecharegistro ? new Date(fecharegistro) : null,
         idimagen,
         estado,
-        cantidad: cantidad ? parseFloat(cantidad) : null
+        cantidad: cantidad !== undefined ? parseFloat(cantidad) : insumoExiste.cantidad
+      },
+      include: {
+        categoriainsumos: true,
+        imagenes: true,
+        unidadmedida: true
       }
     });
 
-    res.json(actualizado);
+    res.json(formatearInsumo(actualizado));
   } catch (error) {
     res.status(500).json({ message: 'Error al actualizar insumo', error: error.message });
   }
 };
 
-// Eliminar insumo (SIN CAMBIOS - FUNCIONA BIEN)
+// Eliminar insumo
 exports.remove = async (req, res) => {
   try {
     const id = parseInt(req.params.id);

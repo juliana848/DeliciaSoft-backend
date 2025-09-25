@@ -8,4 +8,8 @@ router.post('/', controller.create);
 router.put('/:id', controller.update);
 router.delete('/:id', controller.remove);
 
+// ✅ Nueva ruta para sumar cantidad
+router.patch('/:id/sumar', controller.sumarCantidad);
+
+
 module.exports = router;

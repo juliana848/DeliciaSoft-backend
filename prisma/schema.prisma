@@ -92,7 +92,7 @@ model compra {
   subtotal      Decimal?        @db.Decimal(10, 2)
   iva           Decimal?        @db.Decimal(10, 2)
   total         Decimal?        @db.Decimal(10, 2)
-  estado        Boolean         @default(true)
+  estado        Boolean?          @default(true)
   proveedor     proveedor?      @relation(fields: [idproveedor], references: [idproveedor], onDelete: NoAction, onUpdate: NoAction)
   detallecompra detallecompra[]
 }
