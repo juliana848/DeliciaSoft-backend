@@ -6,15 +6,16 @@ const prisma = new PrismaClient();
 const verificationCodes = {}; // Memoria temporal
 
 // CONFIGURACIÓN DEL TRANSPORTER CON DEBUGGING
-const transporter = nodemailer.createTransporter({
+const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS
   },
-  debug: true, // Activar debug
-  logger: true // Activar logging
+  debug: true,
+  logger: true
 });
+
 
 // Verificar configuración al iniciar
 console.log('🔧 Configuración de email:');
