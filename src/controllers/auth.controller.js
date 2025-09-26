@@ -7,7 +7,7 @@ const fs = require('fs');
 const prisma = new PrismaClient();
 const verificationCodes = {}; // Memoria temporal
 
-const transporter = nodemailer.createTransporter({
+const transporter = nodemailer.createTransport({
   service: 'gmail', // Usar el servicio de Gmail directamente
   auth: {
     user: process.env.EMAIL_USER,
