@@ -7,40 +7,23 @@ const fs = require('fs');
 const prisma = new PrismaClient();
 const verificationCodes = {}; // Memoria temporal
 
-// CONFIGURACIÓN MEJORADA DEL TRANSPORTER
+// CONFIGURACIÓN CORREGIDA DEL TRANSPORTER
 const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS
   },
-  // Configuración optimizada para evitar timeouts
-  pool: true, // Usar pool de conexiones
-  maxConnections: 1,
-  maxMessages: 3,
-  rateDelta: 20000, // 20 segundos entre envíos
-  rateLimit: 5, // máximo 5 emails por rateDelta
-  
-  // Timeouts más largos
-  connectionTimeout: 60000, // 60 segundos
-  greetingTimeout: 30000,   // 30 segundos  
-  socketTimeout: 60000,     // 60 segundos
-  
-  // Configuración TLS mejorada
-  secure: false, // true para puerto 465, false para otros puertos
-  requireTLS: true,
+  // Configuración simplificada pero efectiva
+  secure: false, // true para puerto 465, false para puerto 587
+  port: 587,
   tls: {
-    rejectUnauthorized: false, // Para desarrollo, cambiar a true en producción
-    ciphers: 'SSLv3'
-  },
-  
-  // Debug habilitado
-  logger: true,
-  debug: true
+    rejectUnauthorized: false // Solo para desarrollo
+  }
 });
 
 // Función mejorada para enviar email con reintentos
-async function sendHtmlEmail(to, subject, html, maxRetries = 3) {
+async function sendHtmlEmail(to, subject, html, maxRetries = 2) {
   const mailOptions = {
     from: `"DeliciaSoft" <${process.env.EMAIL_USER}>`,
     to,
@@ -65,6 +48,7 @@ async function sendHtmlEmail(to, subject, html, maxRetries = 3) {
       
     } catch (error) {
       console.error(`❌ Error en intento ${attempt}:`, error.message);
+      console.error('❌ Stack completo:', error.stack);
       
       if (attempt === maxRetries) {
         console.error('❌ Todos los intentos fallaron');
@@ -72,7 +56,7 @@ async function sendHtmlEmail(to, subject, html, maxRetries = 3) {
       }
       
       // Esperar antes del siguiente intento
-      const delay = attempt * 2000; // 2s, 4s, 6s
+      const delay = attempt * 1000; // 1s, 2s
       console.log(`⏳ Esperando ${delay}ms antes del siguiente intento...`);
       await new Promise(resolve => setTimeout(resolve, delay));
     }
@@ -103,7 +87,7 @@ function getVerificationEmailTemplate(code) {
           <div style="padding: 40px 30px;">
               <div style="text-align: center; margin-bottom: 30px;">
                   <div style="background-color: #f8bbd9; border-radius: 50%; width: 80px; height: 80px; margin: 0 auto 20px; display: flex; align-items: center; justify-content: center;">
-                      <span style="font-size: 40px;">🔑</span>
+                      <span style="font-size: 40px;">🔐</span>
                   </div>
                   <h2 style="color: #e91e63; margin: 0; font-size: 24px; font-weight: bold;">Código de Verificación</h2>
                   <p style="color: #666; margin: 10px 0 0 0; font-size: 16px;">Hemos recibido una solicitud para verificar tu cuenta</p>
@@ -138,7 +122,7 @@ function getVerificationEmailTemplate(code) {
 
 // Plantilla HTML: Recuperación de contraseña
 function getPasswordResetEmailTemplate(code) {
-  return getVerificationEmailTemplate(code).replace("Código de Verificación", "Recuperación de Contraseña").replace("🔑", "🔓");
+  return getVerificationEmailTemplate(code).replace("Código de Verificación", "Recuperación de Contraseña").replace("🔐", "🔓");
 }
 
 module.exports = {
@@ -226,6 +210,10 @@ module.exports = {
       }
 
       console.log('📧 Procesando solicitud de código para:', correo);
+      console.log('🔐 Variables de entorno:');
+      console.log('EMAIL_USER:', process.env.EMAIL_USER);
+      console.log('EMAIL_PASS existe:', !!process.env.EMAIL_PASS);
+      console.log('JWT_SECRET existe:', !!process.env.JWT_SECRET);
 
       // Auto-detectar userType si no se proporciona
       if (!userType) {
@@ -304,9 +292,13 @@ module.exports = {
 
       console.log(`🔑 Código generado para ${correo} (${userType}): ${code}`);
 
-      // Intentar enviar email
+      // Intentar enviar email con manejo mejorado de errores
       try {
         console.log('📧 Iniciando envío de email...');
+        console.log('📧 Configuración SMTP:');
+        console.log('- Service: gmail');
+        console.log('- User:', process.env.EMAIL_USER);
+        console.log('- Pass length:', process.env.EMAIL_PASS ? process.env.EMAIL_PASS.length : 0);
         
         const emailInfo = await sendHtmlEmail(
           correo, 
@@ -321,36 +313,27 @@ module.exports = {
           message: 'Código enviado exitosamente', 
           codigo: code, // Para desarrollo - remover en producción
           userType: userType,
-          emailSent: true
+          emailSent: true,
+          messageId: emailInfo.messageId
         });
         
       } catch (emailError) {
         console.error('❌ Error enviando email:', emailError.message);
         console.error('❌ Código de error:', emailError.code);
+        console.error('❌ Command:', emailError.command);
+        console.error('❌ Response:', emailError.response);
         
-        // En desarrollo, continuar sin email
-        if (process.env.NODE_ENV === 'development') {
-          console.log('🚧 Modo desarrollo: continuando sin email');
-          res.json({ 
-            success: true,
-            message: 'Código generado (modo desarrollo - email deshabilitado)', 
-            codigo: code,
-            userType: userType,
-            emailSent: false,
-            emailError: emailError.message
-          });
-        } else {
-          // En producción, devolver error pero permitir continuar con código por defecto
-          console.log('🔄 Fallback: usando código por defecto');
-          res.json({ 
-            success: true,
-            message: 'Código generado (email temporalmente no disponible)',
-            codigo: '123456', // Código por defecto para producción
-            userType: userType,
-            emailSent: false,
-            fallback: true
-          });
-        }
+        // En desarrollo o cuando falla el email, usar código por defecto
+        console.log('🔄 Usando código por defecto debido a error de email');
+        res.json({ 
+          success: true,
+          message: 'Código generado (email temporalmente no disponible)', 
+          codigo: '123456', // Código por defecto
+          userType: userType,
+          emailSent: false,
+          emailError: emailError.message,
+          fallback: true
+        });
       }
       
     } catch (error) {
@@ -367,7 +350,7 @@ module.exports = {
     try {
       const { correo, codigo, password } = req.body;
       
-      console.log('🔐 Verificando código de login para:', correo);
+      console.log('🔍 Verificando código de login para:', correo);
       
       if (!correo || !codigo || !password) {
         return res.status(400).json({ 
@@ -471,7 +454,7 @@ module.exports = {
         });
       }
 
-      console.log('🔑 Solicitando reset de contraseña para:', correo);
+      console.log('🔐 Solicitando reset de contraseña para:', correo);
 
       // Verificar si el usuario existe en cualquier tabla
       let userExists = false;
