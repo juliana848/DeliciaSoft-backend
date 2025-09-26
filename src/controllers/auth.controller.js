@@ -7,19 +7,72 @@ const fs = require('fs');
 const prisma = new PrismaClient();
 const verificationCodes = {}; // Memoria temporal
 
-// Configuración del transporter
-const transporter = nodemailer.createTransport({
-  host: 'smtp.gmail.com',
-  port: 587,
-  secure: false, // STARTTLS
+const transporter = nodemailer.createTransporter({
+  service: 'gmail', // Usar el servicio de Gmail directamente
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS
   },
-  tls: {
-    rejectUnauthorized: false // ⛔ Ignora la validación de certificado
-  }
+  // Remover configuraciones TLS problemáticas
+  secure: false,
+  requireTLS: true,
+  logger: true, // Habilitar logging para debug
+  debug: true   // Habilitar debug
 });
+
+// Función mejorada para enviar email con mejor manejo de errores
+async function sendHtmlEmail(to, subject, html) {
+  const logoPath = path.join(__dirname, '../public/images/logo.png');
+  const attachments = [];
+
+  // Verificar si el logo existe antes de añadirlo
+  if (fs.existsSync(logoPath)) {
+    attachments.push({
+      filename: 'logo.png',
+      path: logoPath,
+      cid: 'logo'
+    });
+  } else {
+    console.warn('Logo no encontrado en:', logoPath);
+  }
+
+  const mailOptions = {
+    from: `"DeliciaSoft" <${process.env.EMAIL_USER}>`,
+    to,
+    subject,
+    html,
+    attachments
+  };
+
+  console.log('Enviando email con configuración:', {
+    from: mailOptions.from,
+    to: mailOptions.to,
+    subject: mailOptions.subject,
+    attachments: attachments.length
+  });
+
+  try {
+    // Verificar la conexión antes de enviar
+    await transporter.verify();
+    console.log('Conexión SMTP verificada correctamente');
+    
+    const info = await transporter.sendMail(mailOptions);
+    console.log('Email enviado exitosamente:', info.messageId);
+    return info;
+  } catch (error) {
+    console.error('Error detallado al enviar email:');
+    console.error('- Código de error:', error.code);
+    console.error('- Mensaje:', error.message);
+    console.error('- Stack:', error.stack);
+    
+    // Información adicional para debug
+    if (error.response) {
+      console.error('- Respuesta del servidor:', error.response);
+    }
+    
+    throw error;
+  }
+}
 
 
 // Generar JWT
@@ -40,7 +93,7 @@ function getVerificationEmailTemplate(code) {
   <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #fce4ec;">
       <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
           <div style="background: linear-gradient(135deg, #e91e63 0%, #f8bbd9 100%); padding: 30px; text-align: center;">
-              <img src="cid:logo" alt="DeliciaSoft Logo" style="max-width: 120px; height: auto; margin-bottom: 15px;">
+              <!-- Removido el logo temporalmente -->
               <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: bold;">DeliciaSoft</h1>
               <p style="color: #ffffff; margin: 10px 0 0 0; font-size: 16px; opacity: 0.9;">Tu plataforma de confianza</p>
           </div>
@@ -87,24 +140,38 @@ function getPasswordResetEmailTemplate(code) {
 
 // Enviar email con logo embebido
 async function sendHtmlEmail(to, subject, html) {
-  const logoPath = path.join(__dirname, '../public/images/logo.png'); // Ajusta ruta
-  const attachments = [];
-
-  if (fs.existsSync(logoPath)) {
-    attachments.push({
-      filename: 'logo.png',
-      path: logoPath,
-      cid: 'logo'
-    });
-  }
-
-  await transporter.sendMail({
+  const mailOptions = {
     from: `"DeliciaSoft" <${process.env.EMAIL_USER}>`,
     to,
     subject,
-    html,
-    attachments
-  });
+    html
+    // Sin attachments por ahora
+  };
+
+  console.log('Enviando email a:', to);
+  console.log('Desde:', process.env.EMAIL_USER);
+
+  try {
+    // Verificar conexión primero
+    await transporter.verify();
+    console.log('✅ Conexión SMTP verificada');
+    
+    const info = await transporter.sendMail(mailOptions);
+    console.log('✅ Email enviado. MessageID:', info.messageId);
+    console.log('✅ Respuesta:', info.response);
+    
+    return info;
+  } catch (error) {
+    console.error('❌ Error enviando email:');
+    console.error('- Código:', error.code);
+    console.error('- Mensaje:', error.message);
+    
+    if (error.command) {
+      console.error('- Comando SMTP que falló:', error.command);
+    }
+    
+    throw error;
+  }
 }
 
 module.exports = {
@@ -168,7 +235,7 @@ module.exports = {
     }
   },
 
-  async sendVerificationCode(req, res) {
+ async sendVerificationCode(req, res) {
   try {
     let { correo, userType } = req.body;
     
@@ -176,34 +243,30 @@ module.exports = {
       return res.status(400).json({ message: 'Correo es requerido' });
     }
 
-    // Si no se especifica userType, intentar detectarlo automáticamente
+    // Auto-detectar userType si no se proporciona
     if (!userType) {
       console.log('UserType no especificado, detectando automáticamente para:', correo);
       
-      // Primero buscar en usuarios (admin)
       const usuario = await prisma.usuarios.findFirst({ 
         where: { correo, estado: true } 
       });
       
       if (usuario) {
         userType = 'admin';
-        console.log('Usuario encontrado en tabla usuarios, tipo: admin');
       } else {
-        // Si no se encuentra en usuarios, buscar en clientes
         const cliente = await prisma.cliente.findFirst({ 
           where: { correo, estado: true } 
         });
         
         if (cliente) {
           userType = 'cliente';
-          console.log('Usuario encontrado en tabla clientes, tipo: cliente');
         } else {
           return res.status(404).json({ message: 'Usuario no encontrado' });
         }
       }
     }
 
-    // Verificar si el usuario existe según el tipo detectado/especificado
+    // Verificar si el usuario existe
     let userExists = false;
     
     if (['admin', 'usuario'].includes(userType.toLowerCase())) {
@@ -228,26 +291,45 @@ module.exports = {
     console.log(`Código generado para ${correo} (${userType}): ${code}`);
 
     try {
-      await sendHtmlEmail(correo, 'Código de Verificación - DeliciaSoft', getVerificationEmailTemplate(code));
-      console.log('Email enviado exitosamente a:', correo);
+      const emailInfo = await sendHtmlEmail(
+        correo, 
+        'Código de Verificación - DeliciaSoft', 
+        getVerificationEmailTemplate(code)
+      );
+      
+      console.log('Email enviado exitosamente a:', correo, 'MessageID:', emailInfo.messageId);
       
       res.json({ 
-        message: 'Código enviado', 
-        codigo: code, // Para desarrollo, quitar en producción
-        userType: userType
+        message: 'Código enviado exitosamente', 
+        codigo: code, // Para desarrollo
+        userType: userType,
+        emailSent: true
       });
+      
     } catch (emailError) {
-      console.error('Error enviando email, pero código generado:', emailError);
-      // Aún devolver éxito para desarrollo
-      res.json({ 
-        message: 'Código generado (email falló)', 
-        codigo: code,
-        userType: userType
-      });
+      console.error('Error específico del email:', emailError.message);
+      
+      // En desarrollo, permitir continuar sin email
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Modo desarrollo: continuando sin enviar email');
+        res.json({ 
+          message: 'Código generado (modo desarrollo - email deshabilitado)', 
+          codigo: code,
+          userType: userType,
+          emailSent: false,
+          emailError: emailError.message
+        });
+      } else {
+        // En producción, devolver error
+        res.status(500).json({ 
+          message: 'Error al enviar email de verificación',
+          error: emailError.message
+        });
+      }
     }
     
   } catch (error) {
-    console.error('Error enviando código:', error);
+    console.error('Error general en sendVerificationCode:', error);
     res.status(500).json({ message: 'Error interno del servidor' });
   }
 },
