@@ -169,41 +169,88 @@ module.exports = {
   },
 
   async sendVerificationCode(req, res) {
-    try {
-      const { correo, userType } = req.body;
-      if (!correo || !userType) {
-        return res.status(400).json({ message: 'Faltan datos requeridos' });
-      }
+  try {
+    let { correo, userType } = req.body;
+    
+    if (!correo) {
+      return res.status(400).json({ message: 'Correo es requerido' });
+    }
 
-      // Verificar si el usuario existe
-      let userExists = false;
+    // Si no se especifica userType, intentar detectarlo automáticamente
+    if (!userType) {
+      console.log('UserType no especificado, detectando automáticamente para:', correo);
       
-      if (['admin', 'usuario'].includes(userType.toLowerCase())) {
-        const usuario = await prisma.usuarios.findFirst({ 
-          where: { correo, estado: true } 
-        });
-        userExists = !!usuario;
-      } else if (['cliente', 'client'].includes(userType.toLowerCase())) {
+      // Primero buscar en usuarios (admin)
+      const usuario = await prisma.usuarios.findFirst({ 
+        where: { correo, estado: true } 
+      });
+      
+      if (usuario) {
+        userType = 'admin';
+        console.log('Usuario encontrado en tabla usuarios, tipo: admin');
+      } else {
+        // Si no se encuentra en usuarios, buscar en clientes
         const cliente = await prisma.cliente.findFirst({ 
           where: { correo, estado: true } 
         });
-        userExists = !!cliente;
+        
+        if (cliente) {
+          userType = 'cliente';
+          console.log('Usuario encontrado en tabla clientes, tipo: cliente');
+        } else {
+          return res.status(404).json({ message: 'Usuario no encontrado' });
+        }
       }
-
-      if (!userExists) {
-        return res.status(404).json({ message: 'Usuario no encontrado' });
-      }
-
-      const code = Math.floor(100000 + Math.random() * 900000).toString();
-      verificationCodes[correo] = { code, expiry: Date.now() + 600000 };
-
-      await sendHtmlEmail(correo, 'Código de Verificación - DeliciaSoft', getVerificationEmailTemplate(code));
-      res.json({ message: 'Código enviado', codigo: code });
-    } catch (error) {
-      console.error('Error enviando código:', error);
-      res.status(500).json({ message: 'Error interno del servidor' });
     }
-  },
+
+    // Verificar si el usuario existe según el tipo detectado/especificado
+    let userExists = false;
+    
+    if (['admin', 'usuario'].includes(userType.toLowerCase())) {
+      const usuario = await prisma.usuarios.findFirst({ 
+        where: { correo, estado: true } 
+      });
+      userExists = !!usuario;
+    } else if (['cliente', 'client'].includes(userType.toLowerCase())) {
+      const cliente = await prisma.cliente.findFirst({ 
+        where: { correo, estado: true } 
+      });
+      userExists = !!cliente;
+    }
+
+    if (!userExists) {
+      return res.status(404).json({ message: 'Usuario no encontrado' });
+    }
+
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    verificationCodes[correo] = { code, expiry: Date.now() + 600000 };
+
+    console.log(`Código generado para ${correo} (${userType}): ${code}`);
+
+    try {
+      await sendHtmlEmail(correo, 'Código de Verificación - DeliciaSoft', getVerificationEmailTemplate(code));
+      console.log('Email enviado exitosamente a:', correo);
+      
+      res.json({ 
+        message: 'Código enviado', 
+        codigo: code, // Para desarrollo, quitar en producción
+        userType: userType
+      });
+    } catch (emailError) {
+      console.error('Error enviando email, pero código generado:', emailError);
+      // Aún devolver éxito para desarrollo
+      res.json({ 
+        message: 'Código generado (email falló)', 
+        codigo: code,
+        userType: userType
+      });
+    }
+    
+  } catch (error) {
+    console.error('Error enviando código:', error);
+    res.status(500).json({ message: 'Error interno del servidor' });
+  }
+},
 
   async verifyCodeAndLogin(req, res) {
     try {
