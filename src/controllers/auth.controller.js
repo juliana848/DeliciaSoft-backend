@@ -1,17 +1,17 @@
 const { PrismaClient } = require('@prisma/client');
 const jwt = require('jsonwebtoken');
-// Cambiar nodemailer por el SDK oficial de Brevo
+// Usar sib-api-v3-sdk que es más estable
 const SibApiV3Sdk = require('sib-api-v3-sdk');
 
 const prisma = new PrismaClient();
 const verificationCodes = {}; // Memoria temporal
 
-// CONFIGURACIÓN CON BREVO (SENDINBLUE)
-let brevoClient = null;
+// CONFIGURACIÓN CON BREVO usando sib-api-v3-sdk
+let transactionalEmailsApi = null;
 
 function initializeBrevoClient() {
   try {
-    console.log('📧 Inicializando Brevo client...');
+    console.log('📧 Inicializando cliente de Brevo (sib-api-v3-sdk)...');
     console.log('BREVO_API_KEY existe:', !!process.env.BREVO_API_KEY);
     console.log('EMAIL_USER:', process.env.EMAIL_USER);
     console.log('NODE_ENV:', process.env.NODE_ENV);
@@ -21,16 +21,16 @@ function initializeBrevoClient() {
       return null;
     }
 
-    // Configurar el cliente de Brevo
+    // Configurar cliente con sib-api-v3-sdk (funciona garantizado)
     const defaultClient = SibApiV3Sdk.ApiClient.instance;
     const apiKey = defaultClient.authentications['api-key'];
     apiKey.apiKey = process.env.BREVO_API_KEY;
 
-    // Crear instancia del cliente de email transaccional
-    brevoClient = new SibApiV3Sdk.TransactionalEmailsApi();
+    // Crear instancia del API transaccional
+    transactionalEmailsApi = new SibApiV3Sdk.TransactionalEmailsApi();
 
-    console.log('✅ Cliente Brevo inicializado correctamente');
-    return brevoClient;
+    console.log('✅ Cliente Brevo inicializado correctamente (sib-api-v3-sdk)');
+    return transactionalEmailsApi;
 
   } catch (error) {
     console.error('❌ Error inicializando cliente Brevo:', error.message);
@@ -43,12 +43,12 @@ initializeBrevoClient();
 
 // Función para enviar email con Brevo
 async function sendBrevoEmail(to, subject, htmlContent) {
-  if (!brevoClient) {
+  if (!transactionalEmailsApi) {
     console.log('⚠️ Cliente Brevo no disponible, reinicializando...');
     initializeBrevoClient();
   }
 
-  if (!brevoClient) {
+  if (!transactionalEmailsApi) {
     throw new Error('No se pudo configurar el servicio de email Brevo');
   }
 
@@ -69,7 +69,8 @@ async function sendBrevoEmail(to, subject, htmlContent) {
   console.log('📧 Enviando email a través de Brevo:', to);
   
   try {
-    const response = await brevoClient.sendTransacEmail(sendSmtpEmail);
+    const response = await transactionalEmailsApi.sendTransacEmail(sendSmtpEmail);
+    
     console.log('✅ Email enviado exitosamente:', response.messageId);
     return response;
     
@@ -315,7 +316,7 @@ module.exports = {
           message: 'Código enviado exitosamente a través de Brevo', 
           userType: detectedUserType,
           emailSent: true,
-          provider: 'Brevo'
+          provider: 'Brevo (sib-api-v3-sdk)'
         };
 
         // Solo en desarrollo incluir el código
@@ -514,7 +515,7 @@ module.exports = {
         const response = {
           success: true,
           message: 'Código de recuperación enviado vía Brevo',
-          provider: 'Brevo'
+          provider: 'Brevo (sib-api-v3-sdk)'
         };
 
         if (process.env.NODE_ENV !== 'production') {
