@@ -1,84 +1,87 @@
 const { PrismaClient } = require('@prisma/client');
 const jwt = require('jsonwebtoken');
-const nodemailer = require('nodemailer');
+// Cambiar nodemailer por el SDK oficial de Brevo
+const SibApiV3Sdk = require('sib-api-v3-sdk');
 
 const prisma = new PrismaClient();
 const verificationCodes = {}; // Memoria temporal
 
-// CONFIGURACIÓN SIMPLE Y ROBUSTA DEL TRANSPORTER
-let transporter = null;
+// CONFIGURACIÓN CON BREVO (SENDINBLUE)
+let brevoClient = null;
 
-function initializeTransporter() {
+function initializeBrevoClient() {
   try {
-    console.log('🔧 Inicializando transporter...');
+    console.log('📧 Inicializando Brevo client...');
+    console.log('BREVO_API_KEY existe:', !!process.env.BREVO_API_KEY);
     console.log('EMAIL_USER:', process.env.EMAIL_USER);
-    console.log('EMAIL_PASS existe:', !!process.env.EMAIL_PASS);
     console.log('NODE_ENV:', process.env.NODE_ENV);
 
-    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-      console.error('❌ EMAIL_USER o EMAIL_PASS no están configurados');
+    if (!process.env.BREVO_API_KEY || !process.env.EMAIL_USER) {
+      console.error('❌ BREVO_API_KEY o EMAIL_USER no están configurados');
       return null;
     }
 
-    transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS
-      },
-      secure: false,
-      port: 587,
-      tls: {
-        rejectUnauthorized: false
-      }
-    });
+    // Configurar el cliente de Brevo
+    const defaultClient = SibApiV3Sdk.ApiClient.instance;
+    const apiKey = defaultClient.authentications['api-key'];
+    apiKey.apiKey = process.env.BREVO_API_KEY;
 
-    console.log('✅ Transporter inicializado correctamente');
-    return transporter;
+    // Crear instancia del cliente de email transaccional
+    brevoClient = new SibApiV3Sdk.TransactionalEmailsApi();
+
+    console.log('✅ Cliente Brevo inicializado correctamente');
+    return brevoClient;
 
   } catch (error) {
-    console.error('❌ Error inicializando transporter:', error.message);
+    console.error('❌ Error inicializando cliente Brevo:', error.message);
     return null;
   }
 }
 
 // Inicializar al cargar el módulo
-initializeTransporter();
+initializeBrevoClient();
 
-// Función simplificada para enviar email
-async function sendHtmlEmail(to, subject, html) {
-  if (!transporter) {
-    console.log('⚠️ Transporter no disponible, reinicializando...');
-    initializeTransporter();
+// Función para enviar email con Brevo
+async function sendBrevoEmail(to, subject, htmlContent) {
+  if (!brevoClient) {
+    console.log('⚠️ Cliente Brevo no disponible, reinicializando...');
+    initializeBrevoClient();
   }
 
-  if (!transporter) {
-    throw new Error('No se pudo configurar el servicio de email');
+  if (!brevoClient) {
+    throw new Error('No se pudo configurar el servicio de email Brevo');
   }
 
-  const mailOptions = {
-    from: `"DeliciaSoft" <${process.env.EMAIL_USER}>`,
-    to,
-    subject,
-    html
+  const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
+  
+  sendSmtpEmail.subject = subject;
+  sendSmtpEmail.htmlContent = htmlContent;
+  sendSmtpEmail.sender = { 
+    name: "DeliciaSoft", 
+    email: process.env.EMAIL_USER 
+  };
+  sendSmtpEmail.to = [{ email: to }];
+  sendSmtpEmail.replyTo = { 
+    name: "DeliciaSoft", 
+    email: process.env.EMAIL_USER 
   };
 
-  console.log('📧 Enviando email a:', to);
+  console.log('📧 Enviando email a través de Brevo:', to);
   
   try {
-    // Verificar conexión
-    await transporter.verify();
-    console.log('✅ Conexión SMTP verificada');
-    
-    // Enviar email
-    const info = await transporter.sendMail(mailOptions);
-    console.log('✅ Email enviado:', info.messageId);
-    
-    return info;
+    const response = await brevoClient.sendTransacEmail(sendSmtpEmail);
+    console.log('✅ Email enviado exitosamente:', response.messageId);
+    return response;
     
   } catch (error) {
-    console.error('❌ Error enviando email:', error.message);
-    throw error;
+    console.error('❌ Error enviando email con Brevo:', error);
+    
+    // Log más detallado del error
+    if (error.response && error.response.body) {
+      console.error('Error details:', error.response.body);
+    }
+    
+    throw new Error(`Error Brevo: ${error.message}`);
   }
 }
 
@@ -90,20 +93,75 @@ function generateJwtToken(correo, userType) {
   return jwt.sign({ correo, userType }, process.env.JWT_SECRET, { expiresIn: '2h' });
 }
 
-// Plantilla HTML simple
+// Plantilla HTML mejorada para Brevo
 function getVerificationEmailTemplate(code) {
   return `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-      <h2 style="color: #e91e63; text-align: center;">DeliciaSoft - Código de Verificación</h2>
-      <div style="background-color: #f9f9f9; padding: 30px; border-radius: 10px; text-align: center;">
-        <p style="font-size: 18px; margin-bottom: 20px;">Tu código de verificación es:</p>
-        <div style="background-color: #e91e63; color: white; padding: 15px; border-radius: 5px; font-size: 24px; font-weight: bold; letter-spacing: 3px;">
-          ${code}
-        </div>
-        <p style="margin-top: 20px; color: #666;">Este código expira en 10 minutos.</p>
-        <p style="color: #666;">No compartas este código con nadie.</p>
-      </div>
-    </div>
+    <!DOCTYPE html>
+    <html lang="es">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Código de Verificación - DeliciaSoft</title>
+    </head>
+    <body style="margin: 0; padding: 0; font-family: 'Arial', sans-serif; background-color: #f4f4f4;">
+      <table role="presentation" style="width: 100%; border-collapse: collapse;">
+        <tr>
+          <td style="padding: 0;">
+            <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff;">
+              <!-- Header -->
+              <div style="background: linear-gradient(135deg, #e91e63, #ad1457); padding: 30px; text-align: center;">
+                <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: bold;">
+                  DeliciaSoft
+                </h1>
+                <p style="color: #ffffff; margin: 10px 0 0; font-size: 16px; opacity: 0.9;">
+                  Código de Verificación
+                </p>
+              </div>
+              
+              <!-- Content -->
+              <div style="padding: 40px 30px;">
+                <h2 style="color: #333333; margin: 0 0 20px; font-size: 24px; text-align: center;">
+                  ¡Hola! 👋
+                </h2>
+                
+                <p style="color: #666666; font-size: 16px; line-height: 1.6; margin: 0 0 30px; text-align: center;">
+                  Hemos recibido una solicitud para verificar tu cuenta. 
+                  Usa el siguiente código para continuar:
+                </p>
+                
+                <!-- Code Box -->
+                <div style="text-align: center; margin: 30px 0;">
+                  <div style="display: inline-block; background: linear-gradient(135deg, #e91e63, #ad1457); color: #ffffff; padding: 20px 40px; border-radius: 12px; font-size: 32px; font-weight: bold; letter-spacing: 8px; box-shadow: 0 4px 15px rgba(233, 30, 99, 0.3);">
+                    ${code}
+                  </div>
+                </div>
+                
+                <p style="color: #666666; font-size: 14px; line-height: 1.5; margin: 30px 0 0; text-align: center;">
+                  Este código es válido por <strong>10 minutos</strong> y es de un solo uso.
+                </p>
+                
+                <div style="background-color: #fff3e0; border-left: 4px solid #ff9800; padding: 15px; margin: 20px 0; border-radius: 4px;">
+                  <p style="color: #ef6c00; font-size: 14px; margin: 0; font-weight: 500;">
+                    🔐 Por tu seguridad, nunca compartas este código con nadie.
+                  </p>
+                </div>
+              </div>
+              
+              <!-- Footer -->
+              <div style="background-color: #f8f9fa; padding: 20px 30px; text-align: center; border-top: 1px solid #e9ecef;">
+                <p style="color: #6c757d; font-size: 12px; margin: 0 0 10px;">
+                  Si no solicitaste este código, puedes ignorar este email.
+                </p>
+                <p style="color: #6c757d; font-size: 12px; margin: 0;">
+                  © 2024 DeliciaSoft. Todos los derechos reservados.
+                </p>
+              </div>
+            </div>
+          </td>
+        </tr>
+      </table>
+    </body>
+    </html>
   `;
 }
 
@@ -192,8 +250,8 @@ module.exports = {
       }
 
       // Verificar variables de entorno críticas
-      if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS || !process.env.JWT_SECRET) {
-        console.error('❌ Variables de entorno faltantes');
+      if (!process.env.BREVO_API_KEY || !process.env.EMAIL_USER || !process.env.JWT_SECRET) {
+        console.error('❌ Variables de entorno faltantes para Brevo');
         return res.status(500).json({
           success: false,
           message: 'Error de configuración del servidor'
@@ -244,9 +302,9 @@ module.exports = {
 
       console.log(`🔑 Código generado: ${code} para ${correo} (${detectedUserType})`);
 
-      // Intentar enviar email
+      // Intentar enviar email con Brevo
       try {
-        await sendHtmlEmail(
+        await sendBrevoEmail(
           correo, 
           'Código de Verificación - DeliciaSoft', 
           getVerificationEmailTemplate(code)
@@ -254,9 +312,10 @@ module.exports = {
         
         const response = {
           success: true,
-          message: 'Código enviado exitosamente', 
+          message: 'Código enviado exitosamente a través de Brevo', 
           userType: detectedUserType,
-          emailSent: true
+          emailSent: true,
+          provider: 'Brevo'
         };
 
         // Solo en desarrollo incluir el código
@@ -267,22 +326,23 @@ module.exports = {
         res.json(response);
         
       } catch (emailError) {
-        console.error('❌ Error enviando email:', emailError.message);
+        console.error('❌ Error enviando email con Brevo:', emailError.message);
         
         // Fallback según entorno
         if (process.env.NODE_ENV !== 'production') {
           res.json({ 
             success: true,
-            message: 'Código generado (email no disponible)', 
+            message: 'Código generado (Brevo no disponible)', 
             codigo: code,
             userType: detectedUserType,
             emailSent: false,
-            fallback: true
+            fallback: true,
+            provider: 'Fallback'
           });
         } else {
           res.status(500).json({
             success: false,
-            message: 'Error enviando código. Intenta nuevamente.'
+            message: 'Error enviando código a través de Brevo. Intenta nuevamente.'
           });
         }
       }
@@ -443,9 +503,9 @@ module.exports = {
         isPasswordReset: true
       };
 
-      // Intentar enviar email
+      // Intentar enviar email con Brevo
       try {
-        await sendHtmlEmail(
+        await sendBrevoEmail(
           correo, 
           'Recuperación de Contraseña - DeliciaSoft', 
           getVerificationEmailTemplate(code)
@@ -453,7 +513,8 @@ module.exports = {
         
         const response = {
           success: true,
-          message: 'Código de recuperación enviado'
+          message: 'Código de recuperación enviado vía Brevo',
+          provider: 'Brevo'
         };
 
         if (process.env.NODE_ENV !== 'production') {
@@ -463,19 +524,20 @@ module.exports = {
         res.json(response);
         
       } catch (emailError) {
-        console.error('❌ Error enviando email reset:', emailError);
+        console.error('❌ Error enviando email reset con Brevo:', emailError);
         
         if (process.env.NODE_ENV !== 'production') {
           res.json({ 
             success: true,
-            message: 'Código generado (email no disponible)',
+            message: 'Código generado (Brevo no disponible)',
             codigo: code,
-            emailSent: false
+            emailSent: false,
+            provider: 'Fallback'
           });
         } else {
           res.status(500).json({
             success: false,
-            message: 'Error enviando código de recuperación'
+            message: 'Error enviando código de recuperación vía Brevo'
           });
         }
       }

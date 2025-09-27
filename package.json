@@ -1,24 +1,21 @@
 {
-  "name": "deliciasoft-api",
+  "name": "deliciasoft-backend",
   "version": "1.0.0",
-  "main": "index.js",
+  "description": "Backend para DeliciaSoft",
+  "main": "src/server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
     "postinstall": "prisma generate"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "description": "",
   "dependencies": {
+    "@getbrevo/brevo": "^3.0.1",
     "@prisma/client": "^6.13.0",
     "axios": "^1.11.0",
     "cloudinary": "^1.41.0",
     "cors": "^2.8.5",
-    "dotenv": "^17.2.1",
-    "express": "^5.1.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.1",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
     "multer": "^2.0.2",
@@ -26,12 +23,7 @@
     "streamifier": "^0.1.1"
   },
   "devDependencies": {
-    "@types/cors": "^2.8.19",
-    "@types/express": "^5.0.3",
-    "@types/node": "^24.2.1",
     "nodemon": "^3.1.10",
-    "prisma": "^6.13.0",
-    "ts-node-dev": "^2.0.0",
-    "typescript": "^5.9.2"
+    "prisma": "^6.13.0"
   }
 }
