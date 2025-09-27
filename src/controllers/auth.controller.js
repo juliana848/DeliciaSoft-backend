@@ -357,11 +357,12 @@ module.exports = {
     }
   },
 
-  async verifyCodeAndLogin(req, res) {
+ async verifyCodeAndLogin(req, res) {
     try {
       const { correo, codigo, password } = req.body;
       
-      console.log('🔍 Verificando código para login:', correo);
+      console.log('🔐 Verificando código para login:', correo);
+      console.log('🔑 Código recibido:', codigo);
       
       if (!correo || !codigo || !password) {
         return res.status(400).json({ 
@@ -370,39 +371,52 @@ module.exports = {
         });
       }
 
-      // Verificar código
+      // VALIDACIÓN ESTRICTA SOLO DEL CÓDIGO REAL DEL SERVIDOR
       const stored = verificationCodes[correo];
-      const isValidCode = stored && 
-        stored.code === codigo && 
-        Date.now() <= stored.expiry;
-
-      // Permitir código de desarrollo
-      const isDevelopmentFallback = process.env.NODE_ENV !== 'production' && codigo === '123456';
-
-      if (!isValidCode && !isDevelopmentFallback) {
+      console.log('💾 Código almacenado:', stored ? stored.code : 'No encontrado');
+      
+      if (!stored) {
+        console.error('❌ No se encontró código para el correo:', correo);
         return res.status(400).json({ 
           success: false,
-          message: 'Código inválido o expirado' 
+          message: 'No se encontró código de verificación. Solicita uno nuevo.' 
         });
       }
 
-      // Limpiar código usado
-      if (stored) {
-        delete verificationCodes[correo];
+      if (stored.code !== codigo) {
+        console.error('❌ Código incorrecto:', codigo, 'vs', stored.code);
+        return res.status(400).json({ 
+          success: false,
+          message: 'Código de verificación incorrecto' 
+        });
       }
+
+      if (Date.now() > stored.expiry) {
+        console.error('❌ Código expirado para:', correo);
+        delete verificationCodes[correo];
+        return res.status(400).json({ 
+          success: false,
+          message: 'Código de verificación expirado. Solicita uno nuevo.' 
+        });
+      }
+
+      // Código válido - eliminar de memoria
+      delete verificationCodes[correo];
+      console.log('✅ Código válido y eliminado');
 
       // Buscar usuario y verificar contraseña
       let user = null;
       let actualUserType = '';
 
       try {
-        // Buscar en usuarios
+        // Buscar en usuarios (admin)
         user = await prisma.usuarios.findFirst({ 
           where: { correo, estado: true } 
         });
         
         if (user && user.hashcontrasena === password) {
           actualUserType = 'admin';
+          console.log('👑 Usuario admin encontrado y autenticado');
         } else {
           user = null;
           
@@ -413,10 +427,11 @@ module.exports = {
           
           if (user && user.hashcontrasena === password) {
             actualUserType = 'cliente';
+            console.log('👤 Cliente encontrado y autenticado');
           }
         }
       } catch (dbError) {
-        console.error('❌ Error en login BD:', dbError);
+        console.error('❌ Error en consulta BD:', dbError);
         return res.status(500).json({
           success: false,
           message: 'Error consultando base de datos'
@@ -424,19 +439,23 @@ module.exports = {
       }
 
       if (!user) {
+        console.error('❌ Usuario no encontrado o contraseña incorrecta');
         return res.status(401).json({ 
           success: false, 
           message: 'Credenciales incorrectas' 
         });
       }
 
+      console.log(`✅ Login exitoso para ${correo} como ${actualUserType}`);
+      
       const token = generateJwtToken(user.correo, actualUserType);
       
       res.json({ 
         success: true, 
         token, 
         user, 
-        userType: actualUserType 
+        userType: actualUserType,
+        message: `Bienvenido ${user.nombre || user.email}`
       });
       
     } catch (error) {
