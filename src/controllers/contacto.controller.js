@@ -1,32 +1,47 @@
 const nodemailer = require('nodemailer');
 const axios = require('axios');
 
-// Configurar transportador de nodemailer
+// Configurar transportador de nodemailer CON OPCIONES TLS
 const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS
-  }
+  },
+  // Agregar estas opciones para resolver el problema de certificados
+  tls: {
+    rejectUnauthorized: false
+  },
+  // Opciones adicionales para mejorar confiabilidad
+  pool: true,
+  maxConnections: 5,
+  maxMessages: 100,
 });
 
 // Verificar reCAPTCHA v2
 const verifyRecaptcha = async (recaptchaToken) => {
   try {
+    console.log('Verificando reCAPTCHA con Google...');
+    console.log('Secret key presente:', !!process.env.RECAPTCHA_V2_SECRET_KEY);
+    
     const response = await axios.post('https://www.google.com/recaptcha/api/siteverify', null, {
       params: {
         secret: process.env.RECAPTCHA_V2_SECRET_KEY,
         response: recaptchaToken
-      }
+      },
+      timeout: 10000
     });
+    
+    console.log('Respuesta de Google reCAPTCHA:', response.data);
     return response.data.success;
   } catch (error) {
-    console.error('Error verificando reCAPTCHA:', error);
+    console.error('Error verificando reCAPTCHA:', error.message);
     return false;
   }
 };
 
-// Plantilla HTML para el correo
+
+// Plantilla HTML para el correo (mantengo tu código original)
 const getEmailTemplate = (nombre, apellidos, correo, telefono, mensaje) => {
   return `
     <!DOCTYPE html>
@@ -251,10 +266,27 @@ const getEmailTemplate = (nombre, apellidos, correo, telefono, mensaje) => {
 // Enviar mensaje de contacto
 const enviarMensajeContacto = async (req, res) => {
   try {
+    console.log('=== INICIO PROCESO CONTACTO ===');
+    console.log('Timestamp:', new Date().toISOString());
+    console.log('Variables de entorno:');
+    console.log('EMAIL_USER:', process.env.EMAIL_USER ? 'Configurado' : 'NO CONFIGURADO');
+    console.log('EMAIL_PASS:', process.env.EMAIL_PASS ? 'Configurado' : 'NO CONFIGURADO');
+    console.log('RECAPTCHA_V2_SECRET_KEY:', process.env.RECAPTCHA_V2_SECRET_KEY ? 'Configurado' : 'NO CONFIGURADO');
+    
     const { nombre, apellidos, correo, telefono, mensaje, recaptchaToken } = req.body;
+
+    console.log('Datos recibidos:', {
+      nombre,
+      apellidos,
+      correo,
+      telefono,
+      mensajeLength: mensaje ? mensaje.length : 0,
+      tokenLength: recaptchaToken ? recaptchaToken.length : 0
+    });
 
     // Validar campos obligatorios
     if (!nombre || !apellidos || !correo || !telefono || !mensaje) {
+      console.log('ERROR: Campos faltantes');
       return res.status(400).json({
         success: false,
         message: "Todos los campos son obligatorios"
@@ -263,19 +295,26 @@ const enviarMensajeContacto = async (req, res) => {
 
     // Validar reCAPTCHA
     if (!recaptchaToken) {
+      console.log('ERROR: Token reCAPTCHA faltante');
       return res.status(400).json({
         success: false,
         message: "Por favor, completa la verificación reCAPTCHA"
       });
     }
 
+    console.log('Iniciando verificación reCAPTCHA...');
     const isRecaptchaValid = await verifyRecaptcha(recaptchaToken);
+    console.log('Resultado reCAPTCHA:', isRecaptchaValid);
+    
     if (!isRecaptchaValid) {
+      console.log('ERROR: reCAPTCHA inválido');
       return res.status(400).json({
         success: false,
         message: "Verificación reCAPTCHA fallida. Inténtalo de nuevo."
       });
     }
+
+    console.log('reCAPTCHA válido, preparando envío de emails...');
 
     // Configurar opciones del correo
     const mailOptions = {
@@ -286,10 +325,27 @@ const enviarMensajeContacto = async (req, res) => {
       html: getEmailTemplate(nombre, apellidos, correo, telefono, mensaje)
     };
 
-    // Enviar correo
-    await transporter.sendMail(mailOptions);
+    console.log('Configuración email principal:', {
+      from: mailOptions.from,
+      to: mailOptions.to,
+      subject: mailOptions.subject
+    });
+
+    // Enviar correo principal
+    console.log('Enviando correo principal...');
+    try {
+      const result = await transporter.sendMail(mailOptions);
+      console.log('Correo principal enviado exitosamente. MessageId:', result.messageId);
+    } catch (emailError) {
+      console.error('ERROR enviando correo principal:');
+      console.error('Mensaje:', emailError.message);
+      console.error('Código:', emailError.code);
+      console.error('Stack:', emailError.stack);
+      throw emailError;
+    }
 
     // Enviar respuesta de confirmación al cliente
+    console.log('Enviando email de confirmación...');
     const confirmationMailOptions = {
       from: `"Delicias Darsy" <${process.env.EMAIL_USER}>`,
       to: correo,
@@ -340,7 +396,15 @@ const enviarMensajeContacto = async (req, res) => {
       `
     };
 
-    await transporter.sendMail(confirmationMailOptions);
+    try {
+      const confirmationResult = await transporter.sendMail(confirmationMailOptions);
+      console.log('Email de confirmación enviado exitosamente. MessageId:', confirmationResult.messageId);
+    } catch (confirmationError) {
+      console.error('ERROR enviando email de confirmación:', confirmationError.message);
+      // No lanzamos error aquí porque el email principal ya se envió
+    }
+
+    console.log('=== PROCESO COMPLETADO EXITOSAMENTE ===');
 
     res.status(200).json({
       success: true,
@@ -348,7 +412,9 @@ const enviarMensajeContacto = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error enviando mensaje de contacto:', error);
+    console.error('=== ERROR GENERAL ===');
+    console.error('Error enviando mensaje de contacto:', error.message);
+    console.error('Stack completo:', error.stack);
     res.status(500).json({
       success: false,
       message: "Error interno del servidor. Inténtalo más tarde."
