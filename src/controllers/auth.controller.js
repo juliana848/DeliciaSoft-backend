@@ -1,33 +1,100 @@
 const { PrismaClient } = require('@prisma/client');
 const jwt = require('jsonwebtoken');
-const nodemailer = require('nodemailer');
-const path = require('path');
-const fs = require('fs');
+// Usar sib-api-v3-sdk que es más estable
+const SibApiV3Sdk = require('sib-api-v3-sdk');
 
 const prisma = new PrismaClient();
 const verificationCodes = {}; // Memoria temporal
 
-// Configuración del transporter
-const transporter = nodemailer.createTransport({
-  host: 'smtp.gmail.com',
-  port: 587,
-  secure: false, // STARTTLS
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS
-  },
-  tls: {
-    rejectUnauthorized: false // ⛔ Ignora la validación de certificado
-  }
-});
+// CONFIGURACIÓN CON BREVO usando sib-api-v3-sdk
+let transactionalEmailsApi = null;
 
+function initializeBrevoClient() {
+  try {
+    console.log('📧 Inicializando cliente de Brevo (sib-api-v3-sdk)...');
+    console.log('BREVO_API_KEY existe:', !!process.env.BREVO_API_KEY);
+    console.log('EMAIL_USER:', process.env.EMAIL_USER);
+    console.log('NODE_ENV:', process.env.NODE_ENV);
+
+    if (!process.env.BREVO_API_KEY || !process.env.EMAIL_USER) {
+      console.error('❌ BREVO_API_KEY o EMAIL_USER no están configurados');
+      return null;
+    }
+
+    // Configurar cliente con sib-api-v3-sdk (funciona garantizado)
+    const defaultClient = SibApiV3Sdk.ApiClient.instance;
+    const apiKey = defaultClient.authentications['api-key'];
+    apiKey.apiKey = process.env.BREVO_API_KEY;
+
+    // Crear instancia del API transaccional
+    transactionalEmailsApi = new SibApiV3Sdk.TransactionalEmailsApi();
+
+    console.log('✅ Cliente Brevo inicializado correctamente (sib-api-v3-sdk)');
+    return transactionalEmailsApi;
+
+  } catch (error) {
+    console.error('❌ Error inicializando cliente Brevo:', error.message);
+    return null;
+  }
+}
+
+// Inicializar al cargar el módulo
+initializeBrevoClient();
+
+// Función para enviar email con Brevo
+async function sendBrevoEmail(to, subject, htmlContent) {
+  if (!transactionalEmailsApi) {
+    console.log('⚠️ Cliente Brevo no disponible, reinicializando...');
+    initializeBrevoClient();
+  }
+
+  if (!transactionalEmailsApi) {
+    throw new Error('No se pudo configurar el servicio de email Brevo');
+  }
+
+  const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
+  
+  sendSmtpEmail.subject = subject;
+  sendSmtpEmail.htmlContent = htmlContent;
+  sendSmtpEmail.sender = { 
+    name: "DeliciaSoft", 
+    email: process.env.EMAIL_USER 
+  };
+  sendSmtpEmail.to = [{ email: to }];
+  sendSmtpEmail.replyTo = { 
+    name: "DeliciaSoft", 
+    email: process.env.EMAIL_USER 
+  };
+
+  console.log('📧 Enviando email a través de Brevo:', to);
+  
+  try {
+    const response = await transactionalEmailsApi.sendTransacEmail(sendSmtpEmail);
+    
+    console.log('✅ Email enviado exitosamente:', response.messageId);
+    return response;
+    
+  } catch (error) {
+    console.error('❌ Error enviando email con Brevo:', error);
+    
+    // Log más detallado del error
+    if (error.response && error.response.body) {
+      console.error('Error details:', error.response.body);
+    }
+    
+    throw new Error(`Error Brevo: ${error.message}`);
+  }
+}
 
 // Generar JWT
 function generateJwtToken(correo, userType) {
+  if (!process.env.JWT_SECRET) {
+    throw new Error('JWT_SECRET no configurado');
+  }
   return jwt.sign({ correo, userType }, process.env.JWT_SECRET, { expiresIn: '2h' });
 }
 
-// Plantilla HTML: Código de verificación
+// Plantilla HTML mejorada para Brevo
 function getVerificationEmailTemplate(code) {
   return `
     <!DOCTYPE html>
@@ -99,48 +166,24 @@ function getVerificationEmailTemplate(code) {
   `;
 }
 
-// Plantilla HTML: Recuperación de contraseña
-function getPasswordResetEmailTemplate(code) {
-  return getVerificationEmailTemplate(code).replace("Código de Verificación", "Recuperación de Contraseña").replace("🔐", "🔑");
-}
-
-// Enviar email con logo embebido
-async function sendHtmlEmail(to, subject, html) {
-  const logoPath = path.join(__dirname, '../public/images/logo.png'); // Ajusta ruta
-  const attachments = [];
-
-  if (fs.existsSync(logoPath)) {
-    attachments.push({
-      filename: 'logo.png',
-      path: logoPath,
-      cid: 'logo'
-    });
-  }
-
-  await transporter.sendMail({
-    from: `"DeliciaSoft" <${process.env.EMAIL_USER}>`,
-    to,
-    subject,
-    html,
-    attachments
-  });
-}
-
 module.exports = {
-  // Login directo sin código de verificación
+  // Login directo sin código de verificación  
   async directLogin(req, res) {
     try {
-      const { correo, password, userType } = req.body;
+      const { correo, password } = req.body;
       
-      if (!correo || !password || !userType) {
-        return res.status(400).json({ message: 'Faltan datos requeridos' });
+      if (!correo || !password) {
+        return res.status(400).json({ 
+          success: false,
+          message: 'Correo y contraseña son requeridos' 
+        });
       }
 
       let user = null;
       let actualUserType = '';
 
-      // Buscar en usuarios si es admin/usuario
-      if (['admin', 'usuario'].includes(userType.toLowerCase())) {
+      // Buscar en usuarios primero
+      try {
         user = await prisma.usuarios.findFirst({ 
           where: { correo, estado: true } 
         });
@@ -150,18 +193,22 @@ module.exports = {
         } else {
           user = null;
         }
+      } catch (error) {
+        console.log('Error buscando en usuarios:', error.message);
       }
 
-      // Buscar en clientes si es cliente o no se encontró en usuarios
-      if (!user && ['cliente', 'client'].includes(userType.toLowerCase())) {
-        user = await prisma.cliente.findFirst({ 
-          where: { correo, estado: true } 
-        });
-        
-        if (user && user.hashcontrasena === password) {
-          actualUserType = 'cliente';
-        } else {
-          user = null;
+      // Si no se encontró, buscar en clientes
+      if (!user) {
+        try {
+          user = await prisma.cliente.findFirst({ 
+            where: { correo, estado: true } 
+          });
+          
+          if (user && user.hashcontrasena === password) {
+            actualUserType = 'cliente';
+          }
+        } catch (error) {
+          console.log('Error buscando en clientes:', error.message);
         }
       }
 
@@ -183,153 +230,418 @@ module.exports = {
       
     } catch (error) {
       console.error('Error en login directo:', error);
-      res.status(500).json({ message: 'Error interno del servidor' });
+      res.status(500).json({ 
+        success: false,
+        message: 'Error interno del servidor' 
+      });
     }
   },
 
   async sendVerificationCode(req, res) {
     try {
       const { correo, userType } = req.body;
-      if (!correo || !userType) {
-        return res.status(400).json({ message: 'Faltan datos requeridos' });
-      }
-
-      // Verificar si el usuario existe
-      let userExists = false;
       
-      if (['admin', 'usuario'].includes(userType.toLowerCase())) {
-        const usuario = await prisma.usuarios.findFirst({ 
-          where: { correo, estado: true } 
+      console.log('📧 Procesando código para:', correo);
+      
+      if (!correo) {
+        return res.status(400).json({ 
+          success: false,
+          message: 'Correo es requerido' 
         });
-        userExists = !!usuario;
-      } else if (['cliente', 'client'].includes(userType.toLowerCase())) {
-        const cliente = await prisma.cliente.findFirst({ 
-          where: { correo, estado: true } 
-        });
-        userExists = !!cliente;
       }
 
-      if (!userExists) {
-        return res.status(404).json({ message: 'Usuario no encontrado' });
+      // Verificar variables de entorno críticas
+      if (!process.env.BREVO_API_KEY || !process.env.EMAIL_USER || !process.env.JWT_SECRET) {
+        console.error('❌ Variables de entorno faltantes para Brevo');
+        return res.status(500).json({
+          success: false,
+          message: 'Error de configuración del servidor'
+        });
       }
 
+      // Detectar tipo de usuario si no se especifica
+      let detectedUserType = userType;
+      
+      if (!detectedUserType) {
+        try {
+          const usuario = await prisma.usuarios.findFirst({ 
+            where: { correo, estado: true } 
+          });
+          
+          if (usuario) {
+            detectedUserType = 'admin';
+          } else {
+            const cliente = await prisma.cliente.findFirst({ 
+              where: { correo, estado: true } 
+            });
+            
+            if (cliente) {
+              detectedUserType = 'cliente';
+            } else {
+              return res.status(404).json({ 
+                success: false,
+                message: 'Usuario no encontrado' 
+              });
+            }
+          }
+        } catch (dbError) {
+          console.error('❌ Error consultando BD:', dbError.message);
+          return res.status(500).json({ 
+            success: false,
+            message: 'Error consultando base de datos' 
+          });
+        }
+      }
+
+      // Generar código
       const code = Math.floor(100000 + Math.random() * 900000).toString();
-      verificationCodes[correo] = { code, expiry: Date.now() + 600000 };
+      verificationCodes[correo] = { 
+        code, 
+        expiry: Date.now() + 600000, // 10 minutos
+        userType: detectedUserType 
+      };
 
-      await sendHtmlEmail(correo, 'Código de Verificación - DeliciaSoft', getVerificationEmailTemplate(code));
-      res.json({ message: 'Código enviado', codigo: code });
+      console.log(`🔑 Código generado: ${code} para ${correo} (${detectedUserType})`);
+
+      // Intentar enviar email con Brevo
+      try {
+        await sendBrevoEmail(
+          correo, 
+          'Código de Verificación - DeliciaSoft', 
+          getVerificationEmailTemplate(code)
+        );
+        
+        const response = {
+          success: true,
+          message: 'Código enviado exitosamente a través de Brevo', 
+          userType: detectedUserType,
+          emailSent: true,
+          provider: 'Brevo (sib-api-v3-sdk)'
+        };
+
+        // Solo en desarrollo incluir el código
+        if (process.env.NODE_ENV !== 'production') {
+          response.codigo = code;
+        }
+
+        res.json(response);
+        
+      } catch (emailError) {
+        console.error('❌ Error enviando email con Brevo:', emailError.message);
+        
+        // Fallback según entorno
+        if (process.env.NODE_ENV !== 'production') {
+          res.json({ 
+            success: true,
+            message: 'Código generado (Brevo no disponible)', 
+            codigo: code,
+            userType: detectedUserType,
+            emailSent: false,
+            fallback: true,
+            provider: 'Fallback'
+          });
+        } else {
+          res.status(500).json({
+            success: false,
+            message: 'Error enviando código a través de Brevo. Intenta nuevamente.'
+          });
+        }
+      }
+      
     } catch (error) {
-      console.error('Error enviando código:', error);
-      res.status(500).json({ message: 'Error interno del servidor' });
+      console.error('❌ Error general:', error);
+      res.status(500).json({ 
+        success: false,
+        message: 'Error interno del servidor'
+      });
     }
   },
 
-  async verifyCodeAndLogin(req, res) {
+ async verifyCodeAndLogin(req, res) {
     try {
-      const { correo, code, userType, password } = req.body;
+      const { correo, codigo, password } = req.body;
       
-      // Si no hay código, hacer login directo
-      if (!code || code === '123456') {
-        return await module.exports.directLogin(req, res);
+      console.log('🔐 Verificando código para login:', correo);
+      console.log('🔑 Código recibido:', codigo);
+      
+      if (!correo || !codigo || !password) {
+        return res.status(400).json({ 
+          success: false,
+          message: 'Correo, código y contraseña requeridos' 
+        });
       }
 
+      // VALIDACIÓN ESTRICTA SOLO DEL CÓDIGO REAL DEL SERVIDOR
       const stored = verificationCodes[correo];
-      if (!stored || stored.code !== code || Date.now() > stored.expiry) {
-        return res.status(400).json({ message: 'Código inválido o expirado' });
+      console.log('💾 Código almacenado:', stored ? stored.code : 'No encontrado');
+      
+      if (!stored) {
+        console.error('❌ No se encontró código para el correo:', correo);
+        return res.status(400).json({ 
+          success: false,
+          message: 'No se encontró código de verificación. Solicita uno nuevo.' 
+        });
       }
-      delete verificationCodes[correo];
 
-      // Proceder con login después de verificar código
-      req.body.code = undefined; // Remover código para login directo
-      return await module.exports.directLogin(req, res);
+      if (stored.code !== codigo) {
+        console.error('❌ Código incorrecto:', codigo, 'vs', stored.code);
+        return res.status(400).json({ 
+          success: false,
+          message: 'Código de verificación incorrecto' 
+        });
+      }
+
+      if (Date.now() > stored.expiry) {
+        console.error('❌ Código expirado para:', correo);
+        delete verificationCodes[correo];
+        return res.status(400).json({ 
+          success: false,
+          message: 'Código de verificación expirado. Solicita uno nuevo.' 
+        });
+      }
+
+      // Código válido - eliminar de memoria
+      delete verificationCodes[correo];
+      console.log('✅ Código válido y eliminado');
+
+      // Buscar usuario y verificar contraseña
+      let user = null;
+      let actualUserType = '';
+
+      try {
+        // Buscar en usuarios (admin)
+        user = await prisma.usuarios.findFirst({ 
+          where: { correo, estado: true } 
+        });
+        
+        if (user && user.hashcontrasena === password) {
+          actualUserType = 'admin';
+          console.log('👑 Usuario admin encontrado y autenticado');
+        } else {
+          user = null;
+          
+          // Buscar en clientes
+          user = await prisma.cliente.findFirst({ 
+            where: { correo, estado: true } 
+          });
+          
+          if (user && user.hashcontrasena === password) {
+            actualUserType = 'cliente';
+            console.log('👤 Cliente encontrado y autenticado');
+          }
+        }
+      } catch (dbError) {
+        console.error('❌ Error en consulta BD:', dbError);
+        return res.status(500).json({
+          success: false,
+          message: 'Error consultando base de datos'
+        });
+      }
+
+      if (!user) {
+        console.error('❌ Usuario no encontrado o contraseña incorrecta');
+        return res.status(401).json({ 
+          success: false, 
+          message: 'Credenciales incorrectas' 
+        });
+      }
+
+      console.log(`✅ Login exitoso para ${correo} como ${actualUserType}`);
+      
+      const token = generateJwtToken(user.correo, actualUserType);
+      
+      res.json({ 
+        success: true, 
+        token, 
+        user, 
+        userType: actualUserType,
+        message: `Bienvenido ${user.nombre || user.email}`
+      });
       
     } catch (error) {
-      console.error('Error en verify-code-and-login:', error);
-      res.status(500).json({ message: 'Error interno del servidor' });
+      console.error('❌ Error en verify-code-and-login:', error);
+      res.status(500).json({ 
+        success: false,
+        message: 'Error interno del servidor' 
+      });
     }
   },
 
   async requestPasswordReset(req, res) {
     try {
-      const { correo, userType } = req.body;
+      const { correo } = req.body;
+      
       if (!correo) {
-        return res.status(400).json({ message: 'Correo requerido' });
+        return res.status(400).json({ 
+          success: false,
+          message: 'Correo requerido' 
+        });
       }
 
-      // Verificar si el usuario existe
+      // Verificar si usuario existe
       let userExists = false;
+      let userType = '';
       
-      if (['admin', 'usuario'].includes(userType?.toLowerCase())) {
+      try {
         const usuario = await prisma.usuarios.findFirst({ 
           where: { correo, estado: true } 
         });
-        userExists = !!usuario;
-      } else {
-        const cliente = await prisma.cliente.findFirst({ 
-          where: { correo, estado: true } 
+        
+        if (usuario) {
+          userExists = true;
+          userType = 'admin';
+        } else {
+          const cliente = await prisma.cliente.findFirst({ 
+            where: { correo, estado: true } 
+          });
+          
+          if (cliente) {
+            userExists = true;
+            userType = 'cliente';
+          }
+        }
+      } catch (dbError) {
+        console.error('❌ Error verificando usuario:', dbError);
+        return res.status(500).json({
+          success: false,
+          message: 'Error verificando usuario'
         });
-        userExists = !!cliente;
       }
 
       if (!userExists) {
-        return res.status(404).json({ message: 'Usuario no encontrado' });
+        return res.status(404).json({ 
+          success: false,
+          message: 'Usuario no encontrado' 
+        });
       }
 
       const code = Math.floor(100000 + Math.random() * 900000).toString();
-      verificationCodes[correo] = { code, expiry: Date.now() + 600000 };
+      verificationCodes[correo] = { 
+        code, 
+        expiry: Date.now() + 600000,
+        userType: userType,
+        isPasswordReset: true
+      };
 
-      await sendHtmlEmail(correo, 'Recuperación de Contraseña - DeliciaSoft', getPasswordResetEmailTemplate(code));
-      res.json({ 
-        message: 'Código de recuperación enviado', 
-        codigo: code // Para desarrollo, quitar en producción
-      });
+      // Intentar enviar email con Brevo
+      try {
+        await sendBrevoEmail(
+          correo, 
+          'Recuperación de Contraseña - DeliciaSoft', 
+          getVerificationEmailTemplate(code)
+        );
+        
+        const response = {
+          success: true,
+          message: 'Código de recuperación enviado vía Brevo',
+          provider: 'Brevo (sib-api-v3-sdk)'
+        };
+
+        if (process.env.NODE_ENV !== 'production') {
+          response.codigo = code;
+        }
+
+        res.json(response);
+        
+      } catch (emailError) {
+        console.error('❌ Error enviando email reset con Brevo:', emailError);
+        
+        if (process.env.NODE_ENV !== 'production') {
+          res.json({ 
+            success: true,
+            message: 'Código generado (Brevo no disponible)',
+            codigo: code,
+            emailSent: false,
+            provider: 'Fallback'
+          });
+        } else {
+          res.status(500).json({
+            success: false,
+            message: 'Error enviando código de recuperación vía Brevo'
+          });
+        }
+      }
+      
     } catch (error) {
-      console.error('Error en recuperación de contraseña:', error);
-      res.status(500).json({ message: 'Error interno del servidor' });
+      console.error('❌ Error en password reset:', error);
+      res.status(500).json({ 
+        success: false,
+        message: 'Error interno del servidor' 
+      });
     }
   },
 
   async resetPassword(req, res) {
     try {
-      const { correo, code, userType, newPassword } = req.body;
+      const { correo, codigo, nuevaPassword } = req.body;
       
-      if (!correo || !newPassword) {
-        return res.status(400).json({ message: 'Correo y nueva contraseña requeridos' });
+      if (!correo || !nuevaPassword) {
+        return res.status(400).json({ 
+          success: false,
+          message: 'Correo y nueva contraseña requeridos' 
+        });
       }
 
-      // Si hay código, verificarlo
-      if (code && code !== '123456') {
+      // Verificar código si se proporciona
+      if (codigo && codigo !== '123456') {
         const stored = verificationCodes[correo];
-        if (!stored || stored.code !== code || Date.now() > stored.expiry) {
-          return res.status(400).json({ message: 'Código inválido o expirado' });
+        if (!stored || stored.code !== codigo || Date.now() > stored.expiry) {
+          return res.status(400).json({ 
+            success: false,
+            message: 'Código inválido o expirado' 
+          });
         }
         delete verificationCodes[correo];
       }
 
       let updated = false;
 
-      if (['admin', 'usuario'].includes(userType?.toLowerCase())) {
-        const result = await prisma.usuarios.updateMany({ 
+      try {
+        // Intentar actualizar en usuarios
+        const usuarioResult = await prisma.usuarios.updateMany({ 
           where: { correo, estado: true }, 
-          data: { hashcontrasena: newPassword } 
+          data: { hashcontrasena: nuevaPassword } 
         });
-        updated = result.count > 0;
-      } else {
-        const result = await prisma.cliente.updateMany({ 
-          where: { correo, estado: true }, 
-          data: { hashcontrasena: newPassword } 
+        
+        if (usuarioResult.count > 0) {
+          updated = true;
+        } else {
+          // Intentar en clientes
+          const clienteResult = await prisma.cliente.updateMany({ 
+            where: { correo, estado: true }, 
+            data: { hashcontrasena: nuevaPassword } 
+          });
+          
+          if (clienteResult.count > 0) {
+            updated = true;
+          }
+        }
+      } catch (dbError) {
+        console.error('❌ Error actualizando contraseña:', dbError);
+        return res.status(500).json({
+          success: false,
+          message: 'Error actualizando contraseña'
         });
-        updated = result.count > 0;
       }
 
       if (!updated) {
-        return res.status(404).json({ message: 'Usuario no encontrado' });
+        return res.status(404).json({ 
+          success: false,
+          message: 'Usuario no encontrado' 
+        });
       }
 
-      res.json({ message: 'Contraseña actualizada con éxito' });
+      res.json({ 
+        success: true,
+        message: 'Contraseña actualizada con éxito' 
+      });
+      
     } catch (error) {
-      console.error('Error reseteando contraseña:', error);
-      res.status(500).json({ message: 'Error interno del servidor' });
+      console.error('❌ Error reseteando contraseña:', error);
+      res.status(500).json({ 
+        success: false,
+        message: 'Error interno del servidor' 
+      });
     }
   }
 };
