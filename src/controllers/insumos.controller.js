@@ -163,6 +163,7 @@ exports.update = async (req, res) => {
   }
 };
 
+//otra vez 
 // Eliminar insumo
 exports.remove = async (req, res) => {
   try {
