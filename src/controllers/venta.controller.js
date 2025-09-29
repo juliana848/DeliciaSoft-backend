@@ -108,7 +108,7 @@ exports.getDetailsWithAbonos = async (req, res) => {
                     select: {
                         nombre: true,
                         apellido: true,
-                        telefono: true
+                        celular: true // Cambiado de telefono a celular
                     }
                 },
                 sede: {
@@ -127,8 +127,8 @@ exports.getDetailsWithAbonos = async (req, res) => {
                     include: {
                         productogeneral: {
                             select: {
-                                nombre: true,
-                                precio: true
+                                nombreproducto: true, // Cambiado de nombre a nombreproducto
+                                precioproducto: true  // Cambiado de precio a precioproducto
                             }
                         }
                     }
@@ -215,7 +215,7 @@ exports.getDetailsById = async (req, res) => {
                     select: {
                         nombre: true,
                         apellido: true,
-                        telefono: true
+                        celular: true // Cambiado de telefono a celular
                     }
                 },
                 sede: {
@@ -234,8 +234,8 @@ exports.getDetailsById = async (req, res) => {
                     include: {
                         productogeneral: {
                             select: {
-                                nombre: true,
-                                precio: true
+                                nombreproducto: true, // Cambiado de nombre a nombreproducto
+                                precioproducto: true  // Cambiado de precio a precioproducto
                             }
                         }
                     }
