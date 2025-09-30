@@ -1,7 +1,6 @@
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
-// Función auxiliar para formatear insumo
 function formatearInsumo(insumo) {
   if (!insumo) return null;
   return {
@@ -14,7 +13,6 @@ function formatearInsumo(insumo) {
   };
 }
 
-// Obtener todos los insumos
 exports.getAll = async (req, res) => {
   try {
     const insumos = await prisma.insumos.findMany({
@@ -24,14 +22,12 @@ exports.getAll = async (req, res) => {
         unidadmedida: true
       }
     });
-
     res.json(insumos.map(formatearInsumo));
   } catch (error) {
     res.status(500).json({ message: 'Error al obtener insumos', error: error.message });
   }
 };
 
-// Obtener insumo por id
 exports.getById = async (req, res) => {
   try {
     const id = parseInt(req.params.id);
@@ -43,16 +39,13 @@ exports.getById = async (req, res) => {
         unidadmedida: true
       }
     });
-
     if (!insumo) return res.status(404).json({ message: 'Insumo no encontrado' });
-
     res.json(formatearInsumo(insumo));
   } catch (error) {
     res.status(500).json({ message: 'Error al obtener insumo', error: error.message });
   }
 };
 
-// Crear nuevo insumo
 exports.create = async (req, res) => {
   try {
     const {
@@ -67,7 +60,6 @@ exports.create = async (req, res) => {
       stockminimo
     } = req.body;
 
-    // Construir el objeto data correctamente
     const dataToCreate = {
       nombreinsumo,
       estado: estado !== undefined ? estado : true,
@@ -77,7 +69,6 @@ exports.create = async (req, res) => {
       fecharegistro: fecharegistro ? new Date(fecharegistro) : null
     };
 
-    // Agregar relaciones con connect
     if (idcategoriainsumos) {
       dataToCreate.categoriainsumos = {
         connect: { idcategoriainsumos: parseInt(idcategoriainsumos) }
@@ -112,7 +103,6 @@ exports.create = async (req, res) => {
   }
 };
 
-// Sumar cantidad
 exports.sumarCantidad = async (req, res) => {
   try {
     const id = parseInt(req.params.id);
@@ -140,7 +130,6 @@ exports.sumarCantidad = async (req, res) => {
   }
 };
 
-// Actualizar insumo
 exports.update = async (req, res) => {
   try {
     const id = parseInt(req.params.id);
@@ -159,7 +148,6 @@ exports.update = async (req, res) => {
     const insumoExiste = await prisma.insumos.findUnique({ where: { idinsumo: id } });
     if (!insumoExiste) return res.status(404).json({ message: 'Insumo no encontrado' });
 
-    // Construir el objeto data correctamente
     const dataToUpdate = {
       nombreinsumo,
       estado,
@@ -169,7 +157,6 @@ exports.update = async (req, res) => {
       fecharegistro: fecharegistro ? new Date(fecharegistro) : insumoExiste.fecharegistro
     };
 
-    // Agregar relaciones con connect solo si hay cambios
     if (idcategoriainsumos !== undefined && idcategoriainsumos !== null) {
       dataToUpdate.categoriainsumos = {
         connect: { idcategoriainsumos: parseInt(idcategoriainsumos) }
@@ -205,20 +192,14 @@ exports.update = async (req, res) => {
   }
 };
 
-// Eliminar insumo
 exports.remove = async (req, res) => {
   try {
     const id = parseInt(req.params.id);
-
     const insumoExiste = await prisma.insumos.findUnique({ where: { idinsumo: id } });
     if (!insumoExiste) return res.status(404).json({ message: 'Insumo no encontrado' });
-
     await prisma.insumos.delete({ where: { idinsumo: id } });
-
     res.json({ message: 'Insumo eliminado correctamente' });
   } catch (error) {
     res.status(500).json({ message: 'Error al eliminar insumo', error: error.message });
   }
 };
-//  ensayo para git 
-//esayo dos no me quiere dejar hacer pulll 
