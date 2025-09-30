@@ -32,16 +32,17 @@ const validateCliente = async (req, res) => {
   }
 };
 
-// Obtener todos los clientes
-const getClientes = async (req, res) => {
-  try {
-    const clientes = await prisma.cliente.findMany();
-    res.json(clientes);
-  } catch (error) {
-    res.status(500).json({ message: "Error al obtener clientes", error: error.message });
-  }
-};
 
+  // Obtener todos los clientes
+  const getClientes = async (req, res) => {
+    try {
+      const clientes = await prisma.cliente.findMany();
+      res.json(clientes);
+    } catch (error) {
+      res.status(500).json({ message: "Error al obtener clientes", error: error.message });
+    }
+  };
+  
 // Obtener cliente por ID
 const getCliente = async (req, res) => {
   const id = parseInt(req.params.id);
@@ -81,16 +82,53 @@ const updateCliente = async (req, res) => {
   }
 };
 
-// Eliminar cliente
 const deleteCliente = async (req, res) => {
   const id = parseInt(req.params.id);
-  try {
-    await prisma.cliente.delete({ where: { idcliente: id } });
-    res.json({ message: "Cliente eliminado correctamente" });
-  } catch (error) {
-    res.status(500).json({ message: "Error al eliminar cliente", error: error.message });
-  }
   
+  try {
+    // Primero verificar si tiene ventas asociadas
+    const ventasAsociadas = await prisma.venta.count({
+      where: { idcliente: id }
+    });
+
+    if (ventasAsociadas > 0) {
+      return res.status(400).json({ 
+        message: "No se puede eliminar el cliente porque está asociado a una venta",
+        tieneVentas: true,
+        cantidadVentas: ventasAsociadas
+      });
+    }
+
+    // Si no tiene ventas, proceder con la eliminación
+    await prisma.cliente.delete({ 
+      where: { idcliente: id } 
+    });
+    
+    res.json({ 
+      message: "Cliente eliminado correctamente",
+      tieneVentas: false
+    });
+  } catch (error) {
+    // Manejar errores específicos de Prisma
+    if (error.code === 'P2003') {
+      return res.status(400).json({ 
+        message: "No se puede eliminar el cliente porque está asociado a una venta",
+        tieneVentas: true
+      });
+    }
+    
+    if (error.code === 'P2025') {
+      return res.status(404).json({ 
+        message: "Cliente no encontrado"
+      });
+    }
+    
+    console.error("Error al eliminar cliente:", error);
+    res.status(400).json({ 
+      message: "No se puede eliminar el cliente porque está asociado a una venta", 
+      tieneVentas: true
+    });
+  }
 };
 
 // Cambiar estado del cliente
@@ -121,18 +159,41 @@ const toggleEstadoCliente = async (req, res) => {
   }
 };
 
-// Verificar si cliente tiene ventas asociadas
 const clienteTieneVentas = async (req, res) => {
   const id = parseInt(req.params.id);
   
   try {
-    const ventas = await prisma.venta.findMany({
+    // Primero verificar que el cliente existe
+    const cliente = await prisma.cliente.findUnique({
+      where: { idcliente: id }
+    });
+
+    if (!cliente) {
+      return res.status(404).json({ 
+        message: "Cliente no encontrado",
+        tieneVentas: false,
+        cantidadVentas: 0
+      });
+    }
+
+    // Contar las ventas asociadas
+    const cantidadVentas = await prisma.venta.count({
       where: { idcliente: id }
     });
     
-    res.json({ tieneVentas: ventas.length > 0, cantidadVentas: ventas.length });
+    res.json({ 
+      tieneVentas: cantidadVentas > 0, 
+      cantidadVentas: cantidadVentas 
+    });
   } catch (error) {
-    res.status(500).json({ message: "Error al verificar ventas", error: error.message });
+    console.error("Error al verificar ventas:", error);
+    
+    // En caso de error, devolver respuesta segura
+    res.status(200).json({ 
+      tieneVentas: false, 
+      cantidadVentas: 0,
+      error: "No se pudo verificar ventas" 
+    });
   }
 };
 
