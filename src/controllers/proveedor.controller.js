@@ -12,15 +12,7 @@ const esNumeroValido = (valor) => {
 exports.getAll = async (req, res) => {
   try {
     const proveedores = await prisma.proveedor.findMany();
-    
-    // Convertir BigInt a String para JSON
-    const proveedoresConvertidos = proveedores.map(p => ({
-      ...p,
-      documento: p.documento ? p.documento.toString() : null,
-      contacto: p.contacto ? p.contacto.toString() : null
-    }));
-    
-    res.json(proveedoresConvertidos);
+    res.json(proveedores);
   } catch (error) {
     res.status(500).json({ message: 'Error al obtener proveedores', error: error.message });
   }
@@ -36,14 +28,7 @@ exports.getById = async (req, res) => {
     
     if (!proveedor) return res.status(404).json({ message: 'Proveedor no encontrado' });
     
-    // Convertir BigInt a String para JSON
-    const response = {
-      ...proveedor,
-      documento: proveedor.documento ? proveedor.documento.toString() : null,
-      contacto: proveedor.contacto ? proveedor.contacto.toString() : null
-    };
-    
-    res.json(response);
+    res.json(proveedor);
   } catch (error) {
     res.status(500).json({ message: 'Error al obtener proveedor', error: error.message });
   }
@@ -87,10 +72,10 @@ exports.create = async (req, res) => {
     const nuevoProveedor = await prisma.proveedor.create({
       data: {
         tipodocumento,
-        documento: documento ? BigInt(documento.toString().trim()) : null,
+        documento: documento ? documento.toString().trim() : null,
         nombreempresa,
         nombreproveedor,
-        contacto: contacto ? BigInt(contacto.toString().trim()) : null,
+        contacto: contacto ? contacto.toString().trim() : null,
         correo,
         direccion,
         estado,
@@ -98,14 +83,7 @@ exports.create = async (req, res) => {
       }
     });
 
-    // Convertir BigInt a String para la respuesta JSON
-    const response = {
-      ...nuevoProveedor,
-      documento: nuevoProveedor.documento ? nuevoProveedor.documento.toString() : null,
-      contacto: nuevoProveedor.contacto ? nuevoProveedor.contacto.toString() : null
-    };
-
-    res.status(201).json(response);
+    res.status(201).json(nuevoProveedor);
   } catch (error) {
     console.error("Error en create proveedor:", error);
     res.status(500).json({ message: 'Error al crear proveedor', error: error.message });
@@ -161,10 +139,10 @@ exports.update = async (req, res) => {
       where: { idproveedor: id },
       data: {
         tipodocumento,
-        documento: documento ? BigInt(documento.toString().trim()) : null,
+        documento: documento ? documento.toString().trim() : null,
         nombreempresa,
         nombreproveedor,
-        contacto: contacto ? BigInt(contacto.toString().trim()) : null,
+        contacto: contacto ? contacto.toString().trim() : null,
         correo,
         direccion,
         estado

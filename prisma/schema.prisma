@@ -250,10 +250,10 @@ model productogeneral {
 model proveedor {
   idproveedor     Int      @id @default(autoincrement())
   tipodocumento   String?  @db.VarChar(50)
-  documento       BigInt?
+  documento       String?  @db.VarChar(30)
   nombreempresa   String?  @db.VarChar(50)
   nombreproveedor String?  @db.VarChar(50)
-  contacto        BigInt?
+  contacto        String?  @db.VarChar(30)
   correo          String?  @db.VarChar(50)
   direccion       String?  @db.VarChar(30)
   estado          Boolean?
