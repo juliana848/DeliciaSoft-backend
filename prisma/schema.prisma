@@ -92,7 +92,7 @@ model compra {
   subtotal      Decimal?        @db.Decimal(10, 2)
   iva           Decimal?        @db.Decimal(10, 2)
   total         Decimal?        @db.Decimal(10, 2)
-  estado        Boolean?          @default(true)
+  estado        Boolean?        @default(true)
   proveedor     proveedor?      @relation(fields: [idproveedor], references: [idproveedor], onDelete: NoAction, onUpdate: NoAction)
   detallecompra detallecompra[]
 }
@@ -180,7 +180,7 @@ model insumos {
   idimagen           Int?
   estado             Boolean?
   cantidad           Decimal?            @db.Decimal(10, 2)
-  precio             Decimal?            @db.Decimal(10, 2) 
+  precio             Decimal?            @db.Decimal(10, 2)
   catalogoadiciones  catalogoadiciones[]
   catalogorelleno    catalogorelleno[]
   catalogosabor      catalogosabor[]
@@ -250,10 +250,10 @@ model productogeneral {
 model proveedor {
   idproveedor     Int      @id @default(autoincrement())
   tipodocumento   String?  @db.VarChar(50)
-  documento       Int?
+  documento       BigInt?
   nombreempresa   String?  @db.VarChar(50)
   nombreproveedor String?  @db.VarChar(50)
-  contacto        Int?
+  contacto        BigInt?
   correo          String?  @db.VarChar(50)
   direccion       String?  @db.VarChar(30)
   estado          Boolean?
@@ -301,7 +301,7 @@ model sede {
   telefono  String?  @db.VarChar(20)
   direccion String?  @db.VarChar(20)
   estado    Boolean?
-  imagenUrl  String?  @db.VarChar(255)
+  imagenUrl String?  @db.VarChar(255)
   venta     venta[]
 }
 
