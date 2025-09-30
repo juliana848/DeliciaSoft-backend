@@ -8,6 +8,24 @@ const esNumeroValido = (valor) => {
   return /^\d+$/.test(str); // Solo acepta dígitos
 };
 
+// 🆕 Función para verificar si tiene compras recientes (menos de 1 mes)
+const tieneComprasRecientes = async (idProveedor) => {
+  const unMesAtras = new Date();
+  unMesAtras.setMonth(unMesAtras.getMonth() - 1);
+  
+  const comprasRecientes = await prisma.compra.count({
+    where: {
+      idproveedor: idProveedor,
+      fechacompra: {
+        gte: unMesAtras
+      },
+      estado: true // Solo compras activas
+    }
+  });
+  
+  return comprasRecientes > 0;
+};
+
 // Obtener todos los proveedores
 exports.getAll = async (req, res) => {
   try {
@@ -125,7 +143,7 @@ exports.update = async (req, res) => {
       }
     }
 
-    // buscar proveedor existente
+    // Buscar proveedor existente
     const proveedorExiste = await prisma.proveedor.findUnique({ 
       where: { idproveedor: id } 
     });
@@ -134,7 +152,17 @@ exports.update = async (req, res) => {
       return res.status(404).json({ message: 'Proveedor no encontrado' });
     }
 
-    // actualizar proveedor
+    // 🆕 VALIDACIÓN: Si intentan deshabilitar, verificar compras recientes
+    if (estado === false && proveedorExiste.estado === true) {
+      const tieneCompras = await tieneComprasRecientes(id);
+      if (tieneCompras) {
+        return res.status(400).json({ 
+          message: 'No se puede deshabilitar el proveedor porque tiene compras registradas en el último mes' 
+        });
+      }
+    }
+
+    // Actualizar proveedor
     const actualizado = await prisma.proveedor.update({
       where: { idproveedor: id },
       data: {
