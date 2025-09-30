@@ -32,17 +32,16 @@ const validateCliente = async (req, res) => {
   }
 };
 
+// Obtener todos los clientes
+const getClientes = async (req, res) => {
+  try {
+    const clientes = await prisma.cliente.findMany();
+    res.json(clientes);
+  } catch (error) {
+    res.status(500).json({ message: "Error al obtener clientes", error: error.message });
+  }
+};
 
-  // Obtener todos los clientes
-  const getClientes = async (req, res) => {
-    try {
-      const clientes = await prisma.cliente.findMany();
-      res.json(clientes);
-    } catch (error) {
-      res.status(500).json({ message: "Error al obtener clientes", error: error.message });
-    }
-  };
-  
 // Obtener cliente por ID
 const getCliente = async (req, res) => {
   const id = parseInt(req.params.id);
@@ -82,11 +81,23 @@ const updateCliente = async (req, res) => {
   }
 };
 
+// Eliminar cliente - CON VALIDACIÓN DE VENTAS ASOCIADAS
 const deleteCliente = async (req, res) => {
   const id = parseInt(req.params.id);
   
   try {
-    // Primero verificar si tiene ventas asociadas
+    // Primero verificar que el cliente existe
+    const clienteExiste = await prisma.cliente.findUnique({
+      where: { idcliente: id }
+    });
+
+    if (!clienteExiste) {
+      return res.status(404).json({ 
+        message: "Cliente no encontrado"
+      });
+    }
+
+    // Verificar si tiene ventas asociadas
     const ventasAsociadas = await prisma.venta.count({
       where: { idcliente: id }
     });
@@ -106,9 +117,11 @@ const deleteCliente = async (req, res) => {
     
     res.json({ 
       message: "Cliente eliminado correctamente",
-      tieneVentas: false
+      success: true
     });
   } catch (error) {
+    console.error("Error al eliminar cliente:", error);
+    
     // Manejar errores específicos de Prisma
     if (error.code === 'P2003') {
       return res.status(400).json({ 
@@ -123,10 +136,10 @@ const deleteCliente = async (req, res) => {
       });
     }
     
-    console.error("Error al eliminar cliente:", error);
-    res.status(400).json({ 
-      message: "No se puede eliminar el cliente porque está asociado a una venta", 
-      tieneVentas: true
+    // Para cualquier otro error
+    res.status(500).json({ 
+      message: "Error al eliminar cliente", 
+      error: error.message 
     });
   }
 };
@@ -159,6 +172,7 @@ const toggleEstadoCliente = async (req, res) => {
   }
 };
 
+// Verificar si cliente tiene ventas asociadas - CON MANEJO DE ERRORES
 const clienteTieneVentas = async (req, res) => {
   const id = parseInt(req.params.id);
   
