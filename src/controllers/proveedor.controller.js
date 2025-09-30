@@ -12,7 +12,15 @@ const esNumeroValido = (valor) => {
 exports.getAll = async (req, res) => {
   try {
     const proveedores = await prisma.proveedor.findMany();
-    res.json(proveedores);
+    
+    // Convertir BigInt a String para JSON
+    const proveedoresConvertidos = proveedores.map(p => ({
+      ...p,
+      documento: p.documento ? p.documento.toString() : null,
+      contacto: p.contacto ? p.contacto.toString() : null
+    }));
+    
+    res.json(proveedoresConvertidos);
   } catch (error) {
     res.status(500).json({ message: 'Error al obtener proveedores', error: error.message });
   }
@@ -25,8 +33,17 @@ exports.getById = async (req, res) => {
     const proveedor = await prisma.proveedor.findUnique({
       where: { idproveedor: id }   
     });
+    
     if (!proveedor) return res.status(404).json({ message: 'Proveedor no encontrado' });
-    res.json(proveedor);
+    
+    // Convertir BigInt a String para JSON
+    const response = {
+      ...proveedor,
+      documento: proveedor.documento ? proveedor.documento.toString() : null,
+      contacto: proveedor.contacto ? proveedor.contacto.toString() : null
+    };
+    
+    res.json(response);
   } catch (error) {
     res.status(500).json({ message: 'Error al obtener proveedor', error: error.message });
   }
@@ -48,26 +65,32 @@ exports.create = async (req, res) => {
     } = req.body;
 
     // Validar documento
-    if (documento && !esNumeroValido(documento)) {
-      return res.status(400).json({ 
-        message: 'El documento contiene caracteres inválidos. Solo se permiten números.' 
-      });
+    if (documento) {
+      const docStr = documento.toString().trim();
+      if (!esNumeroValido(docStr)) {
+        return res.status(400).json({ 
+          message: 'El documento contiene caracteres inválidos. Solo se permiten números.' 
+        });
+      }
     }
 
     // Validar contacto/teléfono
-    if (contacto && !esNumeroValido(contacto)) {
-      return res.status(400).json({ 
-        message: 'El teléfono contiene caracteres inválidos. Solo se permiten números.' 
-      });
+    if (contacto) {
+      const contactoStr = contacto.toString().trim();
+      if (!esNumeroValido(contactoStr)) {
+        return res.status(400).json({ 
+          message: 'El teléfono contiene caracteres inválidos. Solo se permiten números.' 
+        });
+      }
     }
 
     const nuevoProveedor = await prisma.proveedor.create({
       data: {
         tipodocumento,
-        documento: documento ? parseInt(documento) : null,
+        documento: documento ? BigInt(documento.toString().trim()) : null,
         nombreempresa,
         nombreproveedor,
-        contacto: contacto ? parseInt(contacto) : null,
+        contacto: contacto ? BigInt(contacto.toString().trim()) : null,
         correo,
         direccion,
         estado,
@@ -75,7 +98,14 @@ exports.create = async (req, res) => {
       }
     });
 
-    res.status(201).json(nuevoProveedor);
+    // Convertir BigInt a String para la respuesta JSON
+    const response = {
+      ...nuevoProveedor,
+      documento: nuevoProveedor.documento ? nuevoProveedor.documento.toString() : null,
+      contacto: nuevoProveedor.contacto ? nuevoProveedor.contacto.toString() : null
+    };
+
+    res.status(201).json(response);
   } catch (error) {
     console.error("Error en create proveedor:", error);
     res.status(500).json({ message: 'Error al crear proveedor', error: error.message });
@@ -98,20 +128,26 @@ exports.update = async (req, res) => {
     } = req.body;
 
     // Validar documento
-    if (documento && !esNumeroValido(documento)) {
-      return res.status(400).json({ 
-        message: 'El documento contiene caracteres inválidos. Solo se permiten números.' 
-      });
+    if (documento) {
+      const docStr = documento.toString().trim();
+      if (!esNumeroValido(docStr)) {
+        return res.status(400).json({ 
+          message: 'El documento contiene caracteres inválidos. Solo se permiten números.' 
+        });
+      }
     }
 
     // Validar contacto/teléfono
-    if (contacto && !esNumeroValido(contacto)) {
-      return res.status(400).json({ 
-        message: 'El teléfono contiene caracteres inválidos. Solo se permiten números.' 
-      });
+    if (contacto) {
+      const contactoStr = contacto.toString().trim();
+      if (!esNumeroValido(contactoStr)) {
+        return res.status(400).json({ 
+          message: 'El teléfono contiene caracteres inválidos. Solo se permiten números.' 
+        });
+      }
     }
 
-    // Buscar proveedor existente
+    // buscar proveedor existente
     const proveedorExiste = await prisma.proveedor.findUnique({ 
       where: { idproveedor: id } 
     });
@@ -120,15 +156,15 @@ exports.update = async (req, res) => {
       return res.status(404).json({ message: 'Proveedor no encontrado' });
     }
 
-    // Actualizar proveedor
+    // actualizar proveedor
     const actualizado = await prisma.proveedor.update({
       where: { idproveedor: id },
       data: {
         tipodocumento,
-        documento: documento ? parseInt(documento) : null,
+        documento: documento ? BigInt(documento.toString().trim()) : null,
         nombreempresa,
         nombreproveedor,
-        contacto: contacto ? parseInt(contacto) : null,
+        contacto: contacto ? BigInt(contacto.toString().trim()) : null,
         correo,
         direccion,
         estado
