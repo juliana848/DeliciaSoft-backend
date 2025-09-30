@@ -4,7 +4,7 @@ const prisma = new PrismaClient();
 // Obtener todos los productos generales con relaciones
 exports.getAll = async (req, res) => {
   try {
-    console.log('📋 Obteniendo todos los productos...');
+    console.log('📋 Obteniendo todos los productos con recetas...');
     
     const productos = await prisma.productogeneral.findMany({
       include: {
@@ -20,8 +20,24 @@ exports.getAll = async (req, res) => {
         },
         receta: {
           select: {
+            idreceta: true,
             nombrereceta: true,
-            especificaciones: true
+            especificaciones: true,
+            detallereceta: {
+              include: {
+                insumos: {
+                  select: {
+                    nombreinsumo: true,
+                    idinsumo: true
+                  }
+                },
+                unidadmedida: {
+                  select: {
+                    unidadmedida: true
+                  }
+                }
+              }
+            }
           }
         }
       },
@@ -32,13 +48,31 @@ exports.getAll = async (req, res) => {
 
     console.log(`✅ Se encontraron ${productos.length} productos`);
 
-    const productosTransformados = productos.map(producto => ({
-      ...producto,
-      categoria: producto.categoriaproducto?.nombrecategoria || 'Sin categoría',
-      urlimagen: producto.imagenes?.urlimg || null,
-      nombrereceta: producto.receta?.nombrereceta || null,
-      especificacionesreceta: producto.receta?.especificaciones || null
-    }));
+    const productosTransformados = productos.map(producto => {
+      // Transformar insumos de receta si existe
+      const insumosReceta = producto.receta?.detallereceta?.map(detalle => ({
+        id: detalle.idinsumo,
+        nombre: detalle.insumos?.nombreinsumo || 'Sin nombre',
+        cantidad: parseFloat(detalle.cantidad || 0),
+        unidad: detalle.unidadmedida?.unidadmedida || 'unidad'
+      })) || [];
+
+      return {
+        ...producto,
+        categoria: producto.categoriaproducto?.nombrecategoria || 'Sin categoría',
+        urlimagen: producto.imagenes?.urlimg || null,
+        nombrereceta: producto.receta?.nombrereceta || null,
+        especificacionesreceta: producto.receta?.especificaciones || null,
+        // Agregar información completa de receta
+        receta: producto.receta ? {
+          id: producto.receta.idreceta,
+          nombre: producto.receta.nombrereceta,
+          especificaciones: producto.receta.especificaciones,
+          insumos: insumosReceta,
+          pasos: [] // Si tienes pasos de preparación en tu BD, agrégalos aquí
+        } : null
+      };
+    });
 
     res.json(productosTransformados);
   } catch (error) {
