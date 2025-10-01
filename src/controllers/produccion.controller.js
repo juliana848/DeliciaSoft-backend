@@ -5,15 +5,83 @@ const prisma = new PrismaClient();
 exports.getAll = async (req, res) => {
   try {
     const producciones = await prisma.produccion.findMany({
+      include: {
+        detalleproduccion: {
+          include: {
+            productogeneral: {
+              include: {
+                imagenes: {
+                  select: { urlimg: true }
+                },
+                receta: {
+                  include: {
+                    detallereceta: {
+                      include: {
+                        insumos: {
+                          select: {
+                            nombreinsumo: true,
+                            idinsumo: true
+                          }
+                        },
+                        unidadmedida: {
+                          select: {
+                            unidadmedida: true
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
       orderBy: {
         idproduccion: 'desc'
       }
     });
-    res.json(producciones);
+
+    // Transformar datos para el frontend
+    const produccionesTransformadas = producciones.map(prod => ({
+      ...prod,
+      detalleproduccion: prod.detalleproduccion?.map(detalle => ({
+        id: detalle.productogeneral?.idproductogeneral,
+        nombre: detalle.productogeneral?.nombreproducto,
+        cantidad: parseFloat(detalle.cantidadproducto || 0),
+        imagen: detalle.productogeneral?.imagenes?.urlimg || null,
+        receta: detalle.productogeneral?.receta ? {
+          id: detalle.productogeneral.receta.idreceta,
+          nombre: detalle.productogeneral.receta.nombrereceta,
+          especificaciones: detalle.productogeneral.receta.especificaciones,
+          imagen: detalle.productogeneral.imagenes?.urlimg || null,
+          insumos: detalle.productogeneral.receta.detallereceta?.map(dr => ({
+            id: dr.idinsumo,
+            nombre: dr.insumos?.nombreinsumo || 'Sin nombre',
+            cantidad: parseFloat(dr.cantidad || 0),
+            unidad: dr.unidadmedida?.unidadmedida || 'unidad'
+          })) || [],
+          pasos: [] // Si tienes pasos, agrégalos aquí
+        } : null,
+        insumos: detalle.productogeneral?.receta?.detallereceta?.map(dr => ({
+          id: dr.idinsumo,
+          nombre: dr.insumos?.nombreinsumo || 'Sin nombre',
+          cantidad: parseFloat(dr.cantidad || 0),
+          unidad: dr.unidadmedida?.unidadmedida || 'unidad'
+        })) || []
+      })) || []
+    }));
+
+    res.json(produccionesTransformadas);
   } catch (error) {
-    res.status(500).json({ message: 'Error al obtener producciones', error: error.message });
+    console.error('❌ Error al obtener producciones:', error);
+    res.status(500).json({ 
+      message: 'Error al obtener producciones', 
+      error: error.message 
+    });
   }
 };
+
 
 // Obtener producción por id
 exports.getById = async (req, res) => {
@@ -72,7 +140,8 @@ exports.create = async (req, res) => {
       TipoProduccion, 
       nombreproduccion,
       fechapedido, 
-      fechaentrega
+      fechaentrega,
+      productos // ✅ Recibir los productos seleccionados
     } = req.body;
 
     // Validaciones
@@ -84,37 +153,58 @@ exports.create = async (req, res) => {
       return res.status(400).json({ message: 'El nombre de la producción es requerido' });
     }
 
-    // Generar número de pedido automáticamente si es tipo "pedido"
     let numeropedido = '';
     if (TipoProduccion.toLowerCase() === 'pedido') {
       numeropedido = await generarNumeroPedido();
-      console.log('🔢 Número de pedido generado:', numeropedido);
     }
 
-    // ✅ Asignar estados automáticamente según el tipo
-    const estadoproduccion = TipoProduccion.toLowerCase() === 'fabrica' ? 1 : 2; // Pendiente para fábrica, Empaquetando para pedido
-    const estadopedido = TipoProduccion.toLowerCase() === 'pedido' ? 1 : null; // Abonado para pedido
+    const estadoproduccion = TipoProduccion.toLowerCase() === 'fabrica' ? 1 : 2;
+    const estadopedido = TipoProduccion.toLowerCase() === 'pedido' ? 1 : null;
 
-    // Crear el objeto de datos
-    const datosProduccion = {
-      TipoProduccion: TipoProduccion,
-      nombreproduccion: nombreproduccion.trim(),
-      fechapedido: fechapedido ? new Date(fechapedido) : new Date(),
-      fechaentrega: fechaentrega && TipoProduccion.toLowerCase() === 'pedido' ? new Date(fechaentrega) : null,
-      numeropedido: numeropedido,
-      estadoproduccion: estadoproduccion,
-      estadopedido: estadopedido
-    };
+    // ✅ Usar transacción para crear producción Y sus detalles
+    const nuevaProduccion = await prisma.$transaction(async (tx) => {
+      // 1. Crear la producción
+      const produccion = await tx.produccion.create({
+        data: {
+          TipoProduccion: TipoProduccion,
+          nombreproduccion: nombreproduccion.trim(),
+          fechapedido: fechapedido ? new Date(fechapedido) : new Date(),
+          fechaentrega: fechaentrega && TipoProduccion.toLowerCase() === 'pedido' 
+            ? new Date(fechaentrega) 
+            : null,
+          numeropedido: numeropedido,
+          estadoproduccion: estadoproduccion,
+          estadopedido: estadopedido
+        }
+      });
 
-    console.log('💾 Guardando producción con datos:', datosProduccion);
+      // 2. Crear los detalles de producción (productos)
+      if (productos && Array.isArray(productos) && productos.length > 0) {
+        await tx.detalleproduccion.createMany({
+          data: productos.map(prod => ({
+            idproduccion: produccion.idproduccion,
+            idproductogeneral: prod.id,
+            cantidadproducto: prod.cantidad || 1
+          }))
+        });
+      }
 
-    const nuevaProduccion = await prisma.produccion.create({
-      data: datosProduccion
+      // 3. Retornar la producción con sus detalles
+      return await tx.produccion.findUnique({
+        where: { idproduccion: produccion.idproduccion },
+        include: {
+          detalleproduccion: {
+            include: {
+              productogeneral: true
+            }
+          }
+        }
+      });
     });
 
-    console.log('✅ Producción creada:', nuevaProduccion);
-
+    console.log('✅ Producción creada con detalles:', nuevaProduccion);
     res.status(201).json(nuevaProduccion);
+
   } catch (error) {
     console.error('❌ Error al crear producción:', error);
     res.status(500).json({ 
