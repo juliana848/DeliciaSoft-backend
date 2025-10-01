@@ -59,46 +59,22 @@ exports.create = async (req, res) => {
       idcategoriainsumos,
       idunidadmedida,
       fecharegistro,
+      idimagen,
       estado,
       cantidad,
-      precio,
-      stockminimo,
-      imagenBase64  // NUEVO: recibir imagen como base64
+      precio
     } = req.body;
-
-    let idimagen = null;
-
-    // Si viene una imagen, procesarla
-    if (imagenBase64) {
-      const cloudinary = require('cloudinary').v2;
-      
-      // Subir a Cloudinary
-      const result = await cloudinary.uploader.upload(imagenBase64, {
-        folder: 'insumos'
-      });
-
-      // Guardar en tabla imagenes
-      const nuevaImagen = await prisma.imagenes.create({
-        data: {
-          imagen: result.secure_url,
-          fecharegistro: new Date()
-        }
-      });
-
-      idimagen = nuevaImagen.idimagen;
-    }
 
     const nuevoInsumo = await prisma.insumos.create({
       data: {
         nombreinsumo,
         idcategoriainsumos,
         idunidadmedida,
-        fecharegistro: fecharegistro ? new Date(fecharegistro) : new Date(),
-        idimagen,  // ID numérico
-        estado: estado !== undefined ? estado : true,
+        fecharegistro: fecharegistro ? new Date(fecharegistro) : null,
+        idimagen,
+        estado,
         cantidad: cantidad !== undefined ? parseFloat(cantidad) : 0,
-        precio: precio !== undefined ? parseFloat(precio) : 0,
-        stockminimo: stockminimo !== undefined ? parseInt(stockminimo) : 5
+        precio: precio !== undefined ? parseFloat(precio) : 0
       },
       include: {
         categoriainsumos: true,
@@ -109,7 +85,6 @@ exports.create = async (req, res) => {
 
     res.status(201).json(formatearInsumo(nuevoInsumo));
   } catch (error) {
-    console.error('Error al crear insumo:', error);
     res.status(500).json({ message: 'Error al crear insumo', error: error.message });
   }
 };
@@ -143,7 +118,7 @@ exports.sumarCantidad = async (req, res) => {
 };
 
 // Actualizar insumo
-eexports.update = async (req, res) => {
+exports.update = async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const {
@@ -151,37 +126,14 @@ eexports.update = async (req, res) => {
       idcategoriainsumos,
       idunidadmedida,
       fecharegistro,
+      idimagen,
       estado,
       cantidad,
-      precio,
-      stockminimo,
-      imagenBase64  // NUEVO: para actualizar imagen
+      precio
     } = req.body;
 
     const insumoExiste = await prisma.insumos.findUnique({ where: { idinsumo: id } });
     if (!insumoExiste) return res.status(404).json({ message: 'Insumo no encontrado' });
-
-    let idimagen = insumoExiste.idimagen; // Mantener la imagen actual por defecto
-
-    // Si viene una nueva imagen, procesarla
-    if (imagenBase64) {
-      const cloudinary = require('cloudinary').v2;
-      
-      // Subir nueva imagen a Cloudinary
-      const result = await cloudinary.uploader.upload(imagenBase64, {
-        folder: 'insumos'
-      });
-
-      // Guardar en tabla imagenes
-      const nuevaImagen = await prisma.imagenes.create({
-        data: {
-          imagen: result.secure_url,
-          fecharegistro: new Date()
-        }
-      });
-
-      idimagen = nuevaImagen.idimagen; // Usar el nuevo ID
-    }
 
     const actualizado = await prisma.insumos.update({
       where: { idinsumo: id },
@@ -189,12 +141,11 @@ eexports.update = async (req, res) => {
         nombreinsumo,
         idcategoriainsumos,
         idunidadmedida,
-        fecharegistro: fecharegistro ? new Date(fecharegistro) : insumoExiste.fecharegistro,
+        fecharegistro: fecharegistro ? new Date(fecharegistro) : null,
         idimagen,
         estado,
         cantidad: cantidad !== undefined ? parseFloat(cantidad) : insumoExiste.cantidad,
-        precio: precio !== undefined ? parseFloat(precio) : insumoExiste.precio,
-        stockminimo: stockminimo !== undefined ? parseInt(stockminimo) : insumoExiste.stockminimo
+        precio: precio !== undefined ? parseFloat(precio) : insumoExiste.precio
       },
       include: {
         categoriainsumos: true,
@@ -205,7 +156,6 @@ eexports.update = async (req, res) => {
 
     res.json(formatearInsumo(actualizado));
   } catch (error) {
-    console.error('Error al actualizar insumo:', error);
     res.status(500).json({ message: 'Error al actualizar insumo', error: error.message });
   }
 };
