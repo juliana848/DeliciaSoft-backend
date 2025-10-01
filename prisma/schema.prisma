@@ -124,13 +124,13 @@ model detallecompra {
 }
 
 model detalleproduccion {
-  iddetalleproduccion Int      @id @default(autoincrement())
+  iddetalleproduccion Int              @id @default(autoincrement())
   idproductogeneral   Int?
   idproduccion        Int?
-  cantidadproducto    Decimal? @db.Decimal(10, 2)
-
-  produccion      produccion?      @relation(fields: [idproduccion], references: [idproduccion], onDelete: NoAction, onUpdate: NoAction)
-  productogeneral productogeneral? @relation(fields: [idproductogeneral], references: [idproductogeneral], onDelete: NoAction, onUpdate: NoAction)
+  cantidadproducto    Decimal?         @db.Decimal(10, 2)
+  sede                String?          @db.VarChar(50)
+  produccion          produccion?      @relation(fields: [idproduccion], references: [idproduccion], onDelete: NoAction, onUpdate: NoAction)
+  productogeneral     productogeneral? @relation(fields: [idproductogeneral], references: [idproductogeneral], onDelete: NoAction, onUpdate: NoAction)
 }
 
 model detallereceta {
@@ -213,28 +213,25 @@ model permisos {
 }
 
 model produccion {
-  idproduccion     Int       @id @default(autoincrement())
-  nombreproduccion String
-  fechapedido      DateTime?
-  fechaentrega     DateTime?
-  numeropedido     String?
-  estadoproduccion Int       @default(2)
-  estadopedido     Int?
-  TipoProduccion   String
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime? @updatedAt
-
-  // Relaciones inversas
-  detalleproduccion detalleproduccion[] // Relación con detalleproduccion
-  produccion_estado produccion_estado[] // Relación con produccion_estado
+  idproduccion      Int                 @id @default(autoincrement())
+  fechapedido       DateTime?
+  fechaentrega      DateTime?
+  numeropedido      String?
+  estadoproduccion  Int                 @default(2)
+  TipoProduccion    String
+  nombreproduccion  String
+  createdAt         DateTime            @default(now())
+  estadopedido      Int?
+  updatedAt         DateTime?           @updatedAt
+  detalleproduccion detalleproduccion[]
+  produccion_estado produccion_estado[]
 
   @@map("produccion")
 }
 
 model produccion_estado {
-  idproduccion Int
-  idestado     Int
-
+  idproduccion     Int
+  idestado         Int
   estadoproduccion estadoproduccion @relation(fields: [idestado], references: [idestado], onDelete: NoAction, onUpdate: NoAction)
   produccion       produccion       @relation(fields: [idproduccion], references: [idproduccion], onDelete: NoAction, onUpdate: NoAction)
 
