@@ -7,7 +7,7 @@ const controller = require('../controllers/inventariosede.controller');
 router.get('/general', controller.getInventarioGeneral);
 
 // Obtener inventario disponible de una sede específica (para ventas)
-// router.get('/sede/:idsede', controller.getInventarioPorSede);
+router.get('/sede/:idsede', controller.getInventarioPorSede);
 
 // Obtener inventario de un producto específico en todas las sedes
 router.get('/producto/:idproductogeneral', controller.getInventarioProducto);

@@ -2,6 +2,124 @@ const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 const { sumarInventario } = require('./inventariosede.controller');
 
+// Función auxiliar para calcular insumos necesarios
+async function calcularInsumosNecesarios(productos) {
+  const insumosAgrupados = {};
+  
+  for (const producto of productos) {
+    // Obtener producto con su receta completa
+    const productoDB = await prisma.productogeneral.findUnique({
+      where: { idproductogeneral: producto.id },
+      include: {
+        receta: {
+          include: {
+            detallereceta: {
+              include: {
+                insumos: true,
+                unidadmedida: true
+              }
+            }
+          }
+        }
+      }
+    });
+
+    if (!productoDB?.receta?.detallereceta) {
+      console.warn(`⚠️ Producto ${producto.id} no tiene receta asociada`);
+      continue;
+    }
+
+    // Calcular cantidad total según tipo de producción
+    let cantidadTotal = 0;
+    if (producto.cantidadesPorSede) {
+      // Producción de fábrica
+      cantidadTotal = Object.values(producto.cantidadesPorSede).reduce(
+        (sum, cant) => sum + parseFloat(cant || 0), 
+        0
+      );
+    } else {
+      // Pedido
+      cantidadTotal = parseFloat(producto.cantidad || 1);
+    }
+
+    // Multiplicar cada insumo por la cantidad total
+    productoDB.receta.detallereceta.forEach(detalle => {
+      const idinsumo = detalle.idinsumo;
+      const cantidadPorUnidad = parseFloat(detalle.cantidad || 0);
+      const cantidadNecesaria = cantidadPorUnidad * cantidadTotal;
+
+      if (!insumosAgrupados[idinsumo]) {
+        insumosAgrupados[idinsumo] = {
+          idinsumo,
+          nombreinsumo: detalle.insumos.nombreinsumo,
+          cantidadNecesaria: 0,
+          unidad: detalle.unidadmedida?.unidadmedida || 'unidad'
+        };
+      }
+
+      insumosAgrupados[idinsumo].cantidadNecesaria += cantidadNecesaria;
+    });
+  }
+
+  return Object.values(insumosAgrupados);
+}
+
+// Función para verificar disponibilidad de insumos
+async function verificarDisponibilidadInsumos(insumosNecesarios) {
+  const insuficientes = [];
+
+  for (const insumo of insumosNecesarios) {
+    const insumoDB = await prisma.insumos.findUnique({
+      where: { idinsumo: insumo.idinsumo },
+      select: { 
+        idinsumo: true,
+        nombreinsumo: true, 
+        cantidad: true 
+      }
+    });
+
+    if (!insumoDB) {
+      insuficientes.push({
+        ...insumo,
+        disponible: 0,
+        faltante: insumo.cantidadNecesaria
+      });
+      continue;
+    }
+
+    const disponible = parseFloat(insumoDB.cantidad || 0);
+    
+    if (disponible < insumo.cantidadNecesaria) {
+      insuficientes.push({
+        ...insumo,
+        disponible,
+        faltante: insumo.cantidadNecesaria - disponible
+      });
+    }
+  }
+
+  return insuficientes;
+}
+
+// Función para descontar insumos
+async function descontarInsumos(insumosNecesarios, tx) {
+  for (const insumo of insumosNecesarios) {
+    await tx.insumos.update({
+      where: { idinsumo: insumo.idinsumo },
+      data: {
+        cantidad: {
+          decrement: insumo.cantidadNecesaria
+        }
+      }
+    });
+    
+    console.log(
+      `✅ Insumo descontado: ${insumo.nombreinsumo}, ` +
+      `Cantidad: -${insumo.cantidadNecesaria.toFixed(2)} ${insumo.unidad}`
+    );
+  }
+}
+
 // Obtener todas las producciones
 exports.getAll = async (req, res) => {
   try {
@@ -30,11 +148,9 @@ exports.getAll = async (req, res) => {
       orderBy: { idproduccion: 'desc' }
     });
 
-    // Obtener todas las sedes para referencia
     const sedesDisponibles = await obtenerSedesActivas();
 
     const produccionesTransformadas = producciones.map(prod => {
-      // Agrupar detalles por producto
       const productosMap = {};
       
       prod.detalleproduccion?.forEach(detalle => {
@@ -155,7 +271,7 @@ async function obtenerIdSedePorNombre(nombreSede) {
   }
 }
 
-// Crear producción CON ACTUALIZACIÓN DE INVENTARIO
+// CREAR PRODUCCIÓN CON ACTUALIZACIÓN DE INVENTARIO Y DESCUENTO DE INSUMOS
 exports.create = async (req, res) => {
   try {
     console.log('📦 Datos recibidos en el backend:', req.body);
@@ -170,6 +286,42 @@ exports.create = async (req, res) => {
 
     if (!TipoProduccion || !nombreproduccion?.trim()) {
       return res.status(400).json({ message: 'Datos incompletos' });
+    }
+
+    if (!productos || productos.length === 0) {
+      return res.status(400).json({ message: 'Debe incluir al menos un producto' });
+    }
+
+    // ✅ PASO 1: CALCULAR INSUMOS NECESARIOS
+    console.log('🔍 Calculando insumos necesarios...');
+    const insumosNecesarios = await calcularInsumosNecesarios(productos);
+    
+    if (insumosNecesarios.length === 0) {
+      console.warn('⚠️ No se encontraron insumos en las recetas');
+    } else {
+      console.log('📊 Insumos necesarios:', insumosNecesarios);
+    }
+
+    // ✅ PASO 2: VERIFICAR DISPONIBILIDAD (SOLO PARA FÁBRICA)
+    if (TipoProduccion.toLowerCase() === 'fabrica' && insumosNecesarios.length > 0) {
+      console.log('✔️ Verificando disponibilidad de insumos...');
+      const insuficientes = await verificarDisponibilidadInsumos(insumosNecesarios);
+
+      if (insuficientes.length > 0) {
+        const detalles = insuficientes.map(ins => 
+          `• ${ins.nombreinsumo}: Necesita ${ins.cantidadNecesaria.toFixed(2)} ${ins.unidad}, ` +
+          `Disponible ${ins.disponible.toFixed(2)} ${ins.unidad}, ` +
+          `Faltante ${ins.faltante.toFixed(2)} ${ins.unidad}`
+        ).join('\n');
+
+        return res.status(400).json({
+          message: '❌ Insumos insuficientes para esta producción',
+          tipo: 'INSUMOS_INSUFICIENTES',
+          insuficientes: insuficientes,
+          detalles: detalles
+        });
+      }
+      console.log('✅ Todos los insumos están disponibles');
     }
 
     let numeropedido = '';
@@ -199,7 +351,7 @@ exports.create = async (req, res) => {
       // 2. Crear detalles y actualizar inventario
       if (productos && Array.isArray(productos) && productos.length > 0) {
         const detallesParaCrear = [];
-        const inventariosActualizar = []; // Para actualizar inventario después
+        const inventariosActualizar = [];
         
         productos.forEach(prod => {
           if (TipoProduccion.toLowerCase() === 'fabrica' && prod.cantidadesPorSede) {
@@ -213,7 +365,6 @@ exports.create = async (req, res) => {
                   sede: nombreSede
                 });
                 
-                // Agregar a lista de inventarios a actualizar
                 inventariosActualizar.push({
                   idproductogeneral: prod.id,
                   nombreSede: nombreSede,
@@ -238,21 +389,25 @@ exports.create = async (req, res) => {
           });
         }
 
-        // 3. ACTUALIZAR INVENTARIO SOLO PARA PRODUCCIÓN DE FÁBRICA
+        // 3. ✅ DESCONTAR INSUMOS (SOLO PARA FÁBRICA)
+        if (TipoProduccion.toLowerCase() === 'fabrica' && insumosNecesarios.length > 0) {
+          console.log('🔻 Descontando insumos del inventario...');
+          await descontarInsumos(insumosNecesarios, tx);
+        }
+
+        // 4. ACTUALIZAR INVENTARIO DE PRODUCTOS (SOLO PARA FÁBRICA)
         if (TipoProduccion.toLowerCase() === 'fabrica' && inventariosActualizar.length > 0) {
-          console.log('🔄 Actualizando inventario por sede...');
+          console.log('📦 Actualizando inventario de productos por sede...');
           
           for (const item of inventariosActualizar) {
-            // Obtener ID de la sede
             const idsede = await obtenerIdSedePorNombre(item.nombreSede);
             
             if (!idsede) {
-              console.warn(`⚠️ Sede "${item.nombreSede}" no encontrada, saltando actualización de inventario`);
+              console.warn(`⚠️ Sede "${item.nombreSede}" no encontrada, saltando actualización`);
               continue;
             }
 
             try {
-              // Buscar si ya existe inventario
               const inventarioExistente = await tx.inventariosede.findUnique({
                 where: {
                   idproductogeneral_idsede: {
@@ -263,7 +418,6 @@ exports.create = async (req, res) => {
               });
 
               if (inventarioExistente) {
-                // Actualizar sumando la cantidad
                 await tx.inventariosede.update({
                   where: {
                     idproductogeneral_idsede: {
@@ -279,7 +433,6 @@ exports.create = async (req, res) => {
                 });
                 console.log(`✅ Inventario actualizado: Producto ${item.idproductogeneral}, Sede ${item.nombreSede}, +${item.cantidad}`);
               } else {
-                // Crear nuevo registro de inventario
                 await tx.inventariosede.create({
                   data: {
                     idproductogeneral: item.idproductogeneral,
@@ -291,13 +444,13 @@ exports.create = async (req, res) => {
               }
             } catch (invError) {
               console.error(`❌ Error actualizando inventario para producto ${item.idproductogeneral}:`, invError);
-              throw invError; // Revertir transacción si falla
+              throw invError;
             }
           }
         }
       }
 
-      // 4. Retornar producción completa
+      // 5. Retornar producción completa
       return await tx.produccion.findUnique({
         where: { idproduccion: produccion.idproduccion },
         include: {
@@ -324,7 +477,7 @@ exports.create = async (req, res) => {
       });
     });
 
-    console.log('✅ Producción creada con inventario actualizado:', nuevaProduccion);
+    console.log('✅ Producción creada exitosamente:', nuevaProduccion);
     res.status(201).json(nuevaProduccion);
 
   } catch (error) {
