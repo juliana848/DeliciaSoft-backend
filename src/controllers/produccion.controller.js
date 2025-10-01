@@ -72,9 +72,7 @@ exports.create = async (req, res) => {
       TipoProduccion, 
       nombreproduccion,
       fechapedido, 
-      fechaentrega, 
-      estadoproduccion,
-      estadopedido 
+      fechaentrega
     } = req.body;
 
     // Validaciones
@@ -93,6 +91,10 @@ exports.create = async (req, res) => {
       console.log('🔢 Número de pedido generado:', numeropedido);
     }
 
+    // ✅ Asignar estados automáticamente según el tipo
+    const estadoproduccion = TipoProduccion.toLowerCase() === 'fabrica' ? 1 : 2; // Pendiente para fábrica, Empaquetando para pedido
+    const estadopedido = TipoProduccion.toLowerCase() === 'pedido' ? 1 : null; // Abonado para pedido
+
     // Crear el objeto de datos
     const datosProduccion = {
       TipoProduccion: TipoProduccion,
@@ -100,7 +102,8 @@ exports.create = async (req, res) => {
       fechapedido: fechapedido ? new Date(fechapedido) : new Date(),
       fechaentrega: fechaentrega && TipoProduccion.toLowerCase() === 'pedido' ? new Date(fechaentrega) : null,
       numeropedido: numeropedido,
-      estadoproduccion: estadoproduccion || 2
+      estadoproduccion: estadoproduccion,
+      estadopedido: estadopedido
     };
 
     console.log('💾 Guardando producción con datos:', datosProduccion);
