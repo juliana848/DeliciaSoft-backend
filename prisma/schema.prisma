@@ -213,6 +213,7 @@ model permisos {
 
 model produccion {
   idproduccion      Int                 @id @default(autoincrement())
+  nombreproduccion  String?             @db.VarChar(100)  
   fechapedido       DateTime?           @db.Date
   fechaentrega      DateTime?           @db.Date
   numeropedido      String?             @db.VarChar(20)
