@@ -229,6 +229,21 @@ model produccion {
   @@map("produccion")
 }
 
+model inventariosede {
+  idinventariosede    Int              @id @default(autoincrement())
+  idproductogeneral   Int
+  idsede              Int
+  cantidad            Decimal          @db.Decimal(10, 2)
+  fechaactualizacion  DateTime         @default(now()) @updatedAt
+  
+  productogeneral     productogeneral  @relation(fields: [idproductogeneral], references: [idproductogeneral], onDelete: Cascade)
+  sede                sede             @relation(fields: [idsede], references: [idsede], onDelete: Cascade)
+  
+  @@unique([idproductogeneral, idsede])
+  @@index([idproductogeneral])
+  @@index([idsede])
+}
+
 model produccion_estado {
   idproduccion     Int
   idestado         Int
@@ -249,6 +264,7 @@ model productogeneral {
   idreceta            Int?
   detalleproduccion   detalleproduccion[]
   detalleventa        detalleventa[]
+  inventariosede      inventariosede[]
   categoriaproducto   categoriaproducto?  @relation(fields: [idcategoriaproducto], references: [idcategoriaproducto], onDelete: NoAction, onUpdate: NoAction)
   imagenes            imagenes?           @relation(fields: [idimagen], references: [idimagen], onDelete: NoAction, onUpdate: NoAction)
   receta              receta?             @relation(fields: [idreceta], references: [idreceta], onDelete: NoAction, onUpdate: NoAction)
@@ -310,6 +326,7 @@ model sede {
   estado    Boolean?
   imagenUrl String?  @db.VarChar(255)
   venta     venta[]
+  inventariosede      inventariosede[] 
 }
 
 model unidadmedida {
