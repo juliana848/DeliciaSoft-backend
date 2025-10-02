@@ -271,7 +271,7 @@ exports.getDetailsById = async (req, res) => {
 // CREAR VENTA CON DESCUENTO DE INVENTARIO
 exports.create = async (req, res) => {
   try {
-    console.log('🛒 Creando nueva venta con descuento de inventario:', req.body);
+    console.log('🛒 Creando nueva venta:', req.body);
     
     const {
       fechaventa,
@@ -293,55 +293,70 @@ exports.create = async (req, res) => {
       return res.status(400).json({ message: 'Debe incluir al menos un producto' });
     }
 
+    if (!tipoventa) {
+      return res.status(400).json({ message: 'El tipo de venta es requerido' });
+    }
+
+    // Normalizar tipo de venta
+    const tipoVentaNormalizado = tipoventa.toLowerCase();
+    const esVentaDirecta = tipoVentaNormalizado === 'directa' || tipoVentaNormalizado === 'venta directa';
+
+    console.log(`📦 Tipo de venta: ${tipoVentaNormalizado}, Es venta directa: ${esVentaDirecta}`);
+
     const nuevaVenta = await prisma.$transaction(async (tx) => {
-      // 1. Verificar inventario disponible antes de crear la venta
-      console.log('🔍 Verificando inventario disponible...');
-      
-      for (const detalle of detalleventa) {
-        const inventario = await tx.inventariosede.findUnique({
-          where: {
-            idproductogeneral_idsede: {
-              idproductogeneral: detalle.idproductogeneral,
-              idsede: idsede
+      // SOLO VERIFICAR Y DESCONTAR INVENTARIO SI ES VENTA DIRECTA
+      if (esVentaDirecta) {
+        console.log('🔍 Venta directa detectada - Verificando inventario disponible...');
+        
+        for (const detalle of detalleventa) {
+          const inventario = await tx.inventariosede.findUnique({
+            where: {
+              idproductogeneral_idsede: {
+                idproductogeneral: detalle.idproductogeneral,
+                idsede: idsede
+              }
             }
+          });
+
+          if (!inventario) {
+            throw new Error(
+              `No hay inventario del producto ID ${detalle.idproductogeneral} en esta sede`
+            );
           }
-        });
 
-        if (!inventario) {
-          throw new Error(
-            `No hay inventario del producto ID ${detalle.idproductogeneral} en esta sede`
-          );
+          const cantidadDisponible = parseFloat(inventario.cantidad);
+          const cantidadSolicitada = parseFloat(detalle.cantidad || 1);
+
+          if (cantidadDisponible < cantidadSolicitada) {
+            throw new Error(
+              `Inventario insuficiente para producto ID ${detalle.idproductogeneral}. ` +
+              `Disponible: ${cantidadDisponible}, Solicitado: ${cantidadSolicitada}`
+            );
+          }
         }
 
-        const cantidadDisponible = parseFloat(inventario.cantidad);
-        const cantidadSolicitada = parseFloat(detalle.cantidad || 1);
-
-        if (cantidadDisponible < cantidadSolicitada) {
-          throw new Error(
-            `Inventario insuficiente para producto ID ${detalle.idproductogeneral}. ` +
-            `Disponible: ${cantidadDisponible}, Solicitado: ${cantidadSolicitada}`
-          );
-        }
+        console.log('✅ Inventario verificado para venta directa');
+      } else {
+        console.log('📋 Pedido detectado - No se verificará inventario (se producirá después)');
       }
 
-      console.log('✅ Inventario verificado, procediendo con la venta...');
-
-      // 2. Crear la venta
+      // Crear la venta
       const venta = await tx.venta.create({
         data: {
           fechaventa: new Date(fechaventa),
           cliente,
           idsede,
           metodopago,
-          tipoventa,
+          tipoventa: tipoVentaNormalizado,
           estadoVentaId,
           total
         }
       });
 
-      // 3. Crear detalles de venta y descontar inventario
+      console.log(`✅ Venta creada con ID: ${venta.idventa}`);
+
+      // Crear detalles de venta
       for (const detalle of detalleventa) {
-        // Crear detalle de venta
         await tx.detalleventa.create({
           data: {
             idventa: venta.idventa,
@@ -353,28 +368,30 @@ exports.create = async (req, res) => {
           }
         });
 
-        // Descontar del inventario
-        await tx.inventariosede.update({
-          where: {
-            idproductogeneral_idsede: {
-              idproductogeneral: detalle.idproductogeneral,
-              idsede: idsede
+        // SOLO DESCONTAR INVENTARIO SI ES VENTA DIRECTA
+        if (esVentaDirecta) {
+          await tx.inventariosede.update({
+            where: {
+              idproductogeneral_idsede: {
+                idproductogeneral: detalle.idproductogeneral,
+                idsede: idsede
+              }
+            },
+            data: {
+              cantidad: {
+                decrement: parseFloat(detalle.cantidad || 1)
+              }
             }
-          },
-          data: {
-            cantidad: {
-              decrement: parseFloat(detalle.cantidad || 1)
-            }
-          }
-        });
+          });
 
-        console.log(
-          `✅ Inventario actualizado: Producto ${detalle.idproductogeneral}, ` +
-          `Sede ${idsede}, -${detalle.cantidad}`
-        );
+          console.log(
+            `✅ Inventario descontado: Producto ${detalle.idproductogeneral}, ` +
+            `Sede ${idsede}, -${detalle.cantidad}`
+          );
+        }
       }
 
-      // 4. Retornar venta completa
+      // Retornar venta completa
       return await tx.venta.findUnique({
         where: { idventa: venta.idventa },
         include: {
@@ -403,8 +420,16 @@ exports.create = async (req, res) => {
       });
     });
 
-    console.log('✅ Venta creada con ID:', nuevaVenta.idventa);
-    res.status(201).json(nuevaVenta);
+    const mensaje = esVentaDirecta 
+      ? `Venta directa creada. Inventario actualizado.`
+      : `Pedido creado. El producto se producirá después del 50% de abono.`;
+
+    console.log(`✅ ${mensaje}`);
+    
+    res.status(201).json({
+      ...nuevaVenta,
+      mensaje
+    });
 
   } catch (error) {
     console.error('❌ Error al crear venta:', error);
@@ -424,7 +449,6 @@ exports.create = async (req, res) => {
     });
   }
 };
-
 exports.getById = async (req, res) => {
   try {
     const id = parseInt(req.params.id);
