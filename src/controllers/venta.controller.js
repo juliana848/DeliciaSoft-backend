@@ -398,12 +398,18 @@ exports.create = async (req, res) => {
         console.log('📋 Pedido detectado - No se verificará inventario (se producirá después)');
       }
 
-      // Crear la venta
+      let fechaColombia;
+      if (fechaventa) {
+        fechaColombia = new Date(fechaventa);
+      } else {
+        const ahora = new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' });
+        fechaColombia = new Date(ahora);
+        fechaColombia.setHours(0, 0, 0, 0); 
+      }
+
       const venta = await tx.venta.create({
         data: {
-          fechaventa: fechaventa
-            ? new Date(fechaventa)
-            : new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' })),
+          fechaventa: fechaColombia,
           cliente,
           idsede,
           metodopago,
