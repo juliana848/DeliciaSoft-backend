@@ -401,7 +401,9 @@ exports.create = async (req, res) => {
       // Crear la venta
       const venta = await tx.venta.create({
         data: {
-          fechaventa: new Date(fechaventa),
+          fechaventa: fechaventa
+            ? new Date(fechaventa)
+            : new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' })),
           cliente,
           idsede,
           metodopago,
