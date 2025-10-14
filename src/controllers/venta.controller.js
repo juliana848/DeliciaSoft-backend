@@ -98,7 +98,7 @@ exports.getDetailsWithAbonos = async (req, res) => {
             return res.status(400).json({ message: 'ID de venta inválido' });
         }
 
-        console.log(`Obteniendo detalle completo con abonos de venta ID: ${id}`);
+        console.log(`📦 Obteniendo detalle completo con abonos de venta ID: ${id}`);
 
         const venta = await prisma.venta.findUnique({
             where: { idventa: id },
@@ -126,8 +126,16 @@ exports.getDetailsWithAbonos = async (req, res) => {
                     include: {
                         productogeneral: {
                             select: {
+                                idproductogeneral: true,
                                 nombreproducto: true,
-                                precioproducto: true
+                                precioproducto: true,
+                                // ✅ INCLUIR CATEGORÍA
+                                categoriaproducto: {
+                                    select: {
+                                        idcategoriaproducto: true,
+                                        nombrecategoria: true
+                                    }
+                                }
                             }
                         }
                     }
@@ -157,6 +165,25 @@ exports.getDetailsWithAbonos = async (req, res) => {
             abonos = venta.pedido.flatMap(p => p.abonos || []);
         }
 
+        // ✅ TRANSFORMAR DETALLES INCLUYENDO CATEGORÍA
+        const detallesTransformados = venta.detalleventa.map(detalle => ({
+            iddetalleventa: detalle.iddetalleventa,
+            idventa: detalle.idventa,
+            idproductogeneral: detalle.idproductogeneral,
+            cantidad: detalle.cantidad,
+            preciounitario: parseFloat(detalle.preciounitario || 0),
+            subtotal: parseFloat(detalle.subtotal || 0),
+            iva: parseFloat(detalle.iva || 0),
+            nombreProducto: detalle.productogeneral?.nombreproducto || 'Producto N/A',
+            // ✅ AGREGAR CATEGORÍA AL DETALLE
+            categoria: detalle.productogeneral?.categoriaproducto?.nombrecategoria || 'Otros',
+            productogeneral: {
+                ...detalle.productogeneral,
+                categoria: detalle.productogeneral?.categoriaproducto?.nombrecategoria || 'Otros',
+                categoriaproducto: detalle.productogeneral?.categoriaproducto
+            }
+        }));
+
         const ventaTransformada = {
             idventa: venta.idventa,
             fechaventa: venta.fechaventa,
@@ -167,7 +194,7 @@ exports.getDetailsWithAbonos = async (req, res) => {
             clienteData: venta.clienteData,
             sede: venta.sede,
             estadoVenta: venta.estadoVenta,
-            detalleventa: venta.detalleventa || [],
+            detalleventa: detallesTransformados, // ✅ Usar detalles transformados
             abonos: abonos.map(abono => ({
                 idabono: abono.idabono,
                 idpedido: abono.idpedido,
@@ -180,11 +207,13 @@ exports.getDetailsWithAbonos = async (req, res) => {
             }))
         };
 
-        console.log(`Detalle completo de venta ${id} encontrado con ${abonos.length} abonos`);
+        console.log(`✅ Detalle completo de venta ${id} encontrado con ${abonos.length} abonos`);
+        console.log(`📋 Categorías incluidas en ${detallesTransformados.length} productos`);
+        
         res.json(ventaTransformada);
 
     } catch (error) {
-        console.error('Error en getDetailsWithAbonos:', error);
+        console.error('❌ Error en getDetailsWithAbonos:', error);
         res.status(500).json({ 
             message: 'Error al obtener el detalle completo de la venta.', 
             error: error.message,
@@ -201,7 +230,7 @@ exports.getDetailsById = async (req, res) => {
             return res.status(400).json({ message: 'ID de venta inválido' });
         }
 
-        console.log(`Obteniendo detalle de venta ID: ${id}`);
+        console.log(`🔍 Buscando venta con ID: ${id}`);
 
         const venta = await prisma.venta.findUnique({
             where: { idventa: id },
@@ -229,8 +258,16 @@ exports.getDetailsById = async (req, res) => {
                     include: {
                         productogeneral: {
                             select: {
+                                idproductogeneral: true,
                                 nombreproducto: true,
-                                precioproducto: true
+                                precioproducto: true,
+                                // ✅ INCLUIR CATEGORÍA
+                                categoriaproducto: {
+                                    select: {
+                                        idcategoriaproducto: true,
+                                        nombrecategoria: true
+                                    }
+                                }
                             }
                         }
                     }
@@ -239,8 +276,27 @@ exports.getDetailsById = async (req, res) => {
         });
 
         if (!venta) {
-            return res.status(404).json({ message: 'Venta no encontrada.' });
+            return res.status(404).json({ message: `No se encontró la venta con ID: ${id}` });
         }
+
+        // ✅ TRANSFORMAR DETALLES INCLUYENDO CATEGORÍA
+        const detallesTransformados = venta.detalleventa.map(detalle => ({
+            iddetalleventa: detalle.iddetalleventa,
+            idventa: detalle.idventa,
+            idproductogeneral: detalle.idproductogeneral,
+            cantidad: detalle.cantidad,
+            preciounitario: parseFloat(detalle.preciounitario || 0),
+            subtotal: parseFloat(detalle.subtotal || 0),
+            iva: parseFloat(detalle.iva || 0),
+            nombreProducto: detalle.productogeneral?.nombreproducto || 'Producto N/A',
+            // ✅ AGREGAR CATEGORÍA AL DETALLE
+            categoria: detalle.productogeneral?.categoriaproducto?.nombrecategoria || 'Otros',
+            productogeneral: {
+                ...detalle.productogeneral,
+                categoria: detalle.productogeneral?.categoriaproducto?.nombrecategoria || 'Otros',
+                categoriaproducto: detalle.productogeneral?.categoriaproducto
+            }
+        }));
 
         const ventaTransformada = {
             idventa: venta.idventa,
@@ -252,14 +308,16 @@ exports.getDetailsById = async (req, res) => {
             clienteData: venta.clienteData,
             sede: venta.sede,
             estadoVenta: venta.estadoVenta,
-            detalleventa: venta.detalleventa || []
+            detalleventa: detallesTransformados // ✅ Usar detalles transformados
         };
 
-        console.log(`Detalle de venta ${id} encontrado`);
+        console.log(`✅ Detalle de venta ${id} encontrado con ${detallesTransformados.length} productos`);
+        console.log(`📋 Categorías incluidas`);
+        
         res.json(ventaTransformada);
 
     } catch (error) {
-        console.error('Error en getDetailsById:', error);
+        console.error('❌ Error en getDetailsById:', error);
         res.status(500).json({ 
             message: 'Error al obtener el detalle de la venta.', 
             error: error.message,
