@@ -37,7 +37,6 @@ exports.create = async (req, res) => {
       idventa,
       observaciones,
       fechaentrega,
-      mensajepersonalizado
     } = req.body;
 
     const nuevoPedido = await prisma.pedido.create({
@@ -45,7 +44,6 @@ exports.create = async (req, res) => {
         idventa,
         observaciones,
         fechaentrega: fechaentrega ? new Date(fechaentrega) : null,
-        mensajepersonalizado
       }
     });
 
@@ -63,7 +61,6 @@ exports.update = async (req, res) => {
       idventa,
       observaciones,
       fechaentrega,
-      mensajepersonalizado
     } = req.body;
 
     const pedidoExiste = await prisma.pedido.findUnique({ where: { idpedido: id } });
@@ -75,7 +72,6 @@ exports.update = async (req, res) => {
         idventa,
         observaciones,
         fechaentrega: fechaentrega ? new Date(fechaentrega) : null,
-        mensajepersonalizado
       }
     });
 

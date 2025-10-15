@@ -193,13 +193,12 @@ model insumos {
 }
 
 model pedido {
-  idpedido             Int       @id @default(autoincrement())
-  idventa              Int?
-  observaciones        String?   @db.VarChar(100)
-  fechaentrega         DateTime? @db.Date
-  mensajepersonalizado String?   @db.VarChar(100)
-  abonos               abonos[]
-  venta                venta?    @relation(fields: [idventa], references: [idventa], onDelete: NoAction, onUpdate: NoAction)
+  idpedido      Int       @id @default(autoincrement())
+  idventa       Int?
+  observaciones String?   @db.VarChar(100)
+  fechaentrega  DateTime? @db.Date
+  abonos        abonos[]
+  venta         venta?    @relation(fields: [idventa], references: [idventa], onDelete: NoAction, onUpdate: NoAction)
 }
 
 model permisos {
@@ -230,15 +229,14 @@ model produccion {
 }
 
 model inventariosede {
-  idinventariosede    Int              @id @default(autoincrement())
-  idproductogeneral   Int
-  idsede              Int
-  cantidad            Decimal          @db.Decimal(10, 2)
-  fechaactualizacion  DateTime         @default(now()) @updatedAt
-  
-  productogeneral     productogeneral  @relation(fields: [idproductogeneral], references: [idproductogeneral], onDelete: Cascade)
-  sede                sede             @relation(fields: [idsede], references: [idsede], onDelete: Cascade)
-  
+  idinventariosede   Int             @id @default(autoincrement())
+  idproductogeneral  Int
+  idsede             Int
+  cantidad           Decimal         @db.Decimal(10, 2)
+  fechaactualizacion DateTime        @default(now()) @updatedAt
+  productogeneral    productogeneral @relation(fields: [idproductogeneral], references: [idproductogeneral], onDelete: Cascade)
+  sede               sede            @relation(fields: [idsede], references: [idsede], onDelete: Cascade)
+
   @@unique([idproductogeneral, idsede])
   @@index([idproductogeneral])
   @@index([idsede])
@@ -319,14 +317,14 @@ model rolpermiso {
 }
 
 model sede {
-  idsede    Int      @id @default(autoincrement())
-  nombre    String?  @db.VarChar(20)
-  telefono  String?  @db.VarChar(20)
-  direccion String?  @db.VarChar(20)
-  estado    Boolean?
-  imagenUrl String?  @db.VarChar(255)
-  venta     venta[]
-  inventariosede      inventariosede[] 
+  idsede         Int              @id @default(autoincrement())
+  nombre         String?          @db.VarChar(20)
+  telefono       String?          @db.VarChar(20)
+  direccion      String?          @db.VarChar(20)
+  estado         Boolean?
+  imagenUrl      String?          @db.VarChar(255)
+  inventariosede inventariosede[]
+  venta          venta[]
 }
 
 model unidadmedida {
