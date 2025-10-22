@@ -10,6 +10,8 @@ exports.getByProductId = async (req, res) => {
       return res.status(400).json({ message: 'ID de producto inválido' });
     }
 
+    console.log(`🔍 Buscando configuración para producto ID: ${idProducto}`);
+
     const configuracion = await prisma.configuracionproducto.findUnique({
       where: { idproductogeneral: idProducto },
       include: {
@@ -23,6 +25,7 @@ exports.getByProductId = async (req, res) => {
     });
 
     if (!configuracion) {
+      console.log('⚠️ No existe configuración, retornando valores por defecto');
       // Retornar configuración por defecto si no existe
       return res.json({
         idproductogeneral: idProducto,
@@ -40,12 +43,32 @@ exports.getByProductId = async (req, res) => {
       });
     }
 
-    res.json(configuracion);
+    // ✅ TRANSFORMAR los nombres de campos de BD (lowercase) a camelCase para el frontend
+    const configuracionTransformada = {
+      idconfiguracion: configuracion.idconfiguracion,
+      idproductogeneral: configuracion.idproductogeneral,
+      tipoPersonalizacion: configuracion.tipopersonalizacion,
+      limiteTopping: configuracion.limitetopping,
+      limiteSalsa: configuracion.limitesalsa,
+      limiteRelleno: configuracion.limiterelleno,
+      limiteSabor: configuracion.limitesabor,
+      permiteToppings: configuracion.permitetoppings,
+      permiteSalsas: configuracion.permitesalsas,
+      permiteAdiciones: configuracion.permiteadiciones,
+      permiteRellenos: configuracion.permiterellenos,
+      permiteSabores: configuracion.permitesabores,
+      productogeneral: configuracion.productogeneral
+    };
+
+    console.log('✅ Configuración encontrada y transformada:', configuracionTransformada);
+    res.json(configuracionTransformada);
+
   } catch (error) {
     console.error('❌ Error al obtener configuración:', error);
     res.status(500).json({ 
       message: 'Error al obtener configuración', 
-      error: error.message 
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 };
@@ -83,21 +106,21 @@ exports.createOrUpdate = async (req, res) => {
       return res.status(404).json({ message: 'Producto no encontrado' });
     }
 
-    // Preparar datos
+    // ✅ PREPARAR datos con nombres en LOWERCASE para la BD
     const datosConfiguracion = {
-      tipoPersonalizacion: tipoPersonalizacion || 'basico',
-      limiteTopping: permiteToppings ? (limiteTopping !== undefined ? parseInt(limiteTopping) : null) : 0,
-      limiteSalsa: permiteSalsas ? (limiteSalsa !== undefined ? parseInt(limiteSalsa) : null) : 0,
-      limiteRelleno: permiteRellenos ? (limiteRelleno !== undefined ? parseInt(limiteRelleno) : null) : 0,
-      limiteSabor: permiteSabores ? (limiteSabor !== undefined ? parseInt(limiteSabor) : null) : 0,
-      permiteToppings: Boolean(permiteToppings),
-      permiteSalsas: Boolean(permiteSalsas),
-      permiteAdiciones: Boolean(permiteAdiciones),
-      permiteRellenos: Boolean(permiteRellenos),
-      permiteSabores: Boolean(permiteSabores)
+      tipopersonalizacion: tipoPersonalizacion || 'basico',
+      limitetopping: permiteToppings ? (limiteTopping !== undefined && limiteTopping !== null ? parseInt(limiteTopping) : null) : 0,
+      limitesalsa: permiteSalsas ? (limiteSalsa !== undefined && limiteSalsa !== null ? parseInt(limiteSalsa) : null) : 0,
+      limiterelleno: permiteRellenos ? (limiteRelleno !== undefined && limiteRelleno !== null ? parseInt(limiteRelleno) : null) : 0,
+      limitesabor: permiteSabores ? (limiteSabor !== undefined && limiteSabor !== null ? parseInt(limiteSabor) : null) : 0,
+      permitetoppings: Boolean(permiteToppings),
+      permitesalsas: Boolean(permiteSalsas),
+      permiteadiciones: Boolean(permiteAdiciones),
+      permiterellenos: Boolean(permiteRellenos),
+      permitesabores: Boolean(permiteSabores)
     };
 
-    console.log('💾 Datos procesados:', JSON.stringify(datosConfiguracion, null, 2));
+    console.log('💾 Datos procesados para BD:', JSON.stringify(datosConfiguracion, null, 2));
 
     // Crear o actualizar usando upsert
     const configuracion = await prisma.configuracionproducto.upsert({
@@ -117,18 +140,36 @@ exports.createOrUpdate = async (req, res) => {
       }
     });
 
-    console.log('✅ Configuración guardada:', configuracion);
+    // ✅ TRANSFORMAR respuesta de BD (lowercase) a camelCase
+    const configuracionTransformada = {
+      idconfiguracion: configuracion.idconfiguracion,
+      idproductogeneral: configuracion.idproductogeneral,
+      tipoPersonalizacion: configuracion.tipopersonalizacion,
+      limiteTopping: configuracion.limitetopping,
+      limiteSalsa: configuracion.limitesalsa,
+      limiteRelleno: configuracion.limiterelleno,
+      limiteSabor: configuracion.limitesabor,
+      permiteToppings: configuracion.permitetoppings,
+      permiteSalsas: configuracion.permitesalsas,
+      permiteAdiciones: configuracion.permiteadiciones,
+      permiteRellenos: configuracion.permiterellenos,
+      permiteSabores: configuracion.permitesabores,
+      productogeneral: configuracion.productogeneral
+    };
+
+    console.log('✅ Configuración guardada:', configuracionTransformada);
 
     res.json({
       message: 'Configuración guardada exitosamente',
-      configuracion
+      configuracion: configuracionTransformada
     });
 
   } catch (error) {
     console.error('❌ Error al guardar configuración:', error);
     res.status(500).json({ 
       message: 'Error al guardar configuración', 
-      error: error.message 
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 };
@@ -183,7 +224,24 @@ exports.getAll = async (req, res) => {
       }
     });
 
-    res.json(configuraciones);
+    // ✅ TRANSFORMAR todas las configuraciones
+    const configuracionesTransformadas = configuraciones.map(config => ({
+      idconfiguracion: config.idconfiguracion,
+      idproductogeneral: config.idproductogeneral,
+      tipoPersonalizacion: config.tipopersonalizacion,
+      limiteTopping: config.limitetopping,
+      limiteSalsa: config.limitesalsa,
+      limiteRelleno: config.limiterelleno,
+      limiteSabor: config.limitesabor,
+      permiteToppings: config.permitetoppings,
+      permiteSalsas: config.permitesalsas,
+      permiteAdiciones: config.permiteadiciones,
+      permiteRellenos: config.permiterellenos,
+      permiteSabores: config.permitesabores,
+      productogeneral: config.productogeneral
+    }));
+
+    res.json(configuracionesTransformadas);
   } catch (error) {
     console.error('❌ Error al obtener configuraciones:', error);
     res.status(500).json({ 
@@ -198,10 +256,10 @@ exports.getEstadisticas = async (req, res) => {
   try {
     const [total, conToppings, conSalsas, conRellenos, conSabores] = await Promise.all([
       prisma.configuracionproducto.count(),
-      prisma.configuracionproducto.count({ where: { permiteToppings: true } }),
-      prisma.configuracionproducto.count({ where: { permiteSalsas: true } }),
-      prisma.configuracionproducto.count({ where: { permiteRellenos: true } }),
-      prisma.configuracionproducto.count({ where: { permiteSabores: true } })
+      prisma.configuracionproducto.count({ where: { permitetoppings: true } }),
+      prisma.configuracionproducto.count({ where: { permitesalsas: true } }),
+      prisma.configuracionproducto.count({ where: { permiterellenos: true } }),
+      prisma.configuracionproducto.count({ where: { permitesabores: true } })
     ]);
 
     res.json({
