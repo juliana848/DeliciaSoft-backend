@@ -266,6 +266,35 @@ model productogeneral {
   categoriaproducto   categoriaproducto?  @relation(fields: [idcategoriaproducto], references: [idcategoriaproducto], onDelete: NoAction, onUpdate: NoAction)
   imagenes            imagenes?           @relation(fields: [idimagen], references: [idimagen], onDelete: NoAction, onUpdate: NoAction)
   receta              receta?             @relation(fields: [idreceta], references: [idreceta], onDelete: NoAction, onUpdate: NoAction)
+  configuracion       configuracionproducto?
+}
+
+model configuracionproducto {
+  idconfiguracion     Int              @id @default(autoincrement())
+  idproductogeneral   Int              @unique
+  tipoPersonalizacion String           @db.VarChar(50) // 'basico', 'premium', 'personalizado'
+  
+  // Límites de catálogos (0 = no disponible, null = ilimitado, número = límite específico)
+  limiteTopping       Int?             @default(0)
+  limiteSalsa         Int?             @default(0)
+  limiteRelleno       Int?             @default(0)
+  limiteSabor         Int?             @default(0)
+  
+  // Flags de disponibilidad
+  permiteToppings     Boolean          @default(false)
+  permiteSalsas       Boolean          @default(false)
+  permiteAdiciones    Boolean          @default(true)
+  permiteRellenos     Boolean          @default(false)
+  permiteSabores      Boolean          @default(false)
+  
+  // Timestamps
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+  
+  // Relación
+  productogeneral     productogeneral  @relation(fields: [idproductogeneral], references: [idproductogeneral], onDelete: Cascade)
+  
+  @@index([idproductogeneral])
 }
 
 model proveedor {

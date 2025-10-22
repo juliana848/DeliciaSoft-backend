@@ -100,6 +100,9 @@ app.use('/api/contacto', contactoRoutes);
 const inventarioSedeRoutes = require('./routes/inventariosede.routes');
 app.use('/api/inventariosede', inventarioSedeRoutes);
 
+const configuracionProductoRoutes = require('./routes/configuracionproducto.routes');
+app.use('/api/configuracion-producto', configuracionProductoRoutes);
+
 // SOLO para pruebas, puedes borrar luego
 app.get('/test-env', (req, res) => {
   res.json({
