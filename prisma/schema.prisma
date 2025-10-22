@@ -252,49 +252,39 @@ model produccion_estado {
 }
 
 model productogeneral {
-  idproductogeneral   Int                 @id @default(autoincrement())
-  nombreproducto      String?             @db.VarChar(20)
-  precioproducto      Decimal?            @db.Decimal(10, 2)
-  cantidadproducto    Decimal?            @db.Decimal(10, 2)
+  idproductogeneral   Int                    @id @default(autoincrement())
+  nombreproducto      String?                @db.VarChar(20)
+  precioproducto      Decimal?               @db.Decimal(10, 2)
+  cantidadproducto    Decimal?               @db.Decimal(10, 2)
   estado              Boolean?
   idcategoriaproducto Int?
   idimagen            Int?
   idreceta            Int?
+  configuracion       configuracionproducto?
   detalleproduccion   detalleproduccion[]
   detalleventa        detalleventa[]
   inventariosede      inventariosede[]
-  categoriaproducto   categoriaproducto?  @relation(fields: [idcategoriaproducto], references: [idcategoriaproducto], onDelete: NoAction, onUpdate: NoAction)
-  imagenes            imagenes?           @relation(fields: [idimagen], references: [idimagen], onDelete: NoAction, onUpdate: NoAction)
-  receta              receta?             @relation(fields: [idreceta], references: [idreceta], onDelete: NoAction, onUpdate: NoAction)
-  configuracion       configuracionproducto?
+  categoriaproducto   categoriaproducto?     @relation(fields: [idcategoriaproducto], references: [idcategoriaproducto], onDelete: NoAction, onUpdate: NoAction)
+  imagenes            imagenes?              @relation(fields: [idimagen], references: [idimagen], onDelete: NoAction, onUpdate: NoAction)
+  receta              receta?                @relation(fields: [idreceta], references: [idreceta], onDelete: NoAction, onUpdate: NoAction)
 }
 
 model configuracionproducto {
-  idconfiguracion     Int              @id @default(autoincrement())
-  idproductogeneral   Int              @unique
-  tipoPersonalizacion String           @db.VarChar(50) // 'basico', 'premium', 'personalizado'
-  
-  // Límites de catálogos (0 = no disponible, null = ilimitado, número = límite específico)
-  limiteTopping       Int?             @default(0)
-  limiteSalsa         Int?             @default(0)
-  limiteRelleno       Int?             @default(0)
-  limiteSabor         Int?             @default(0)
-  
-  // Flags de disponibilidad
-  permiteToppings     Boolean          @default(false)
-  permiteSalsas       Boolean          @default(false)
-  permiteAdiciones    Boolean          @default(true)
-  permiteRellenos     Boolean          @default(false)
-  permiteSabores      Boolean          @default(false)
-  
-  // Timestamps
-  createdAt           DateTime         @default(now())
-  updatedAt           DateTime         @updatedAt
-  
-  // Relación
-  productogeneral     productogeneral  @relation(fields: [idproductogeneral], references: [idproductogeneral], onDelete: Cascade)
-  
-  @@index([idproductogeneral])
+  idconfiguracion     Int             @id @default(autoincrement())
+  idproductogeneral   Int             @unique
+  tipopersonalizacion String          @db.VarChar(50)
+  limitetopping       Int?            @default(0)
+  limitesalsa         Int?            @default(0)
+  limiterelleno       Int?            @default(0)
+  limitesabor         Int?            @default(0)
+  permitetoppings     Boolean?        @default(false)
+  permitesalsas       Boolean?        @default(false)
+  permiteadiciones    Boolean?        @default(true)
+  permiterellenos     Boolean?        @default(false)
+  permitesabores      Boolean?        @default(false)
+  productogeneral     productogeneral @relation(fields: [idproductogeneral], references: [idproductogeneral], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([idproductogeneral], map: "idx_configuracion_producto")
 }
 
 model proveedor {
