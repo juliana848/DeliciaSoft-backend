@@ -234,9 +234,25 @@ model produccion {
   nombreproduccion  String
   createdAt         DateTime            @default(now())
   estadopedido      Int?
-  updatedAt         DateTime?
+  updatedAt         DateTime?           @updatedAt
   detalleproduccion detalleproduccion[]
   produccion_estado produccion_estado[]
+
+  @@map("produccion")
+}
+
+model inventariosede {
+  idinventariosede   Int             @id @default(autoincrement())
+  idproductogeneral  Int
+  idsede             Int
+  cantidad           Decimal         @db.Decimal(10, 2)
+  fechaactualizacion DateTime        @default(now()) @updatedAt
+  productogeneral    productogeneral @relation(fields: [idproductogeneral], references: [idproductogeneral], onDelete: Cascade)
+  sede               sede            @relation(fields: [idsede], references: [idsede], onDelete: Cascade)
+
+  @@unique([idproductogeneral, idsede])
+  @@index([idproductogeneral])
+  @@index([idsede])
 }
 
 model produccion_estado {
@@ -249,21 +265,39 @@ model produccion_estado {
 }
 
 model productogeneral {
-  idproductogeneral     Int                    @id @default(autoincrement())
-  nombreproducto        String?                @db.VarChar(20)
-  precioproducto        Decimal?               @db.Decimal(10, 2)
-  cantidadproducto      Decimal?               @db.Decimal(10, 2)
-  estado                Boolean?
-  idcategoriaproducto   Int?
-  idimagen              Int?
-  idreceta              Int?
-  configuracionproducto configuracionproducto?
-  detalleproduccion     detalleproduccion[]
-  detalleventa          detalleventa[]
-  inventariosede        inventariosede[]
-  categoriaproducto     categoriaproducto?     @relation(fields: [idcategoriaproducto], references: [idcategoriaproducto], onDelete: NoAction, onUpdate: NoAction)
-  imagenes              imagenes?              @relation(fields: [idimagen], references: [idimagen], onDelete: NoAction, onUpdate: NoAction)
-  receta                receta?                @relation(fields: [idreceta], references: [idreceta], onDelete: NoAction, onUpdate: NoAction)
+  idproductogeneral   Int                    @id @default(autoincrement())
+  nombreproducto      String?                @db.VarChar(20)
+  precioproducto      Decimal?               @db.Decimal(10, 2)
+  cantidadproducto    Decimal?               @db.Decimal(10, 2)
+  estado              Boolean?
+  idcategoriaproducto Int?
+  idimagen            Int?
+  idreceta            Int?
+  configuracion       configuracionproducto?
+  detalleproduccion   detalleproduccion[]
+  detalleventa        detalleventa[]
+  inventariosede      inventariosede[]
+  categoriaproducto   categoriaproducto?     @relation(fields: [idcategoriaproducto], references: [idcategoriaproducto], onDelete: NoAction, onUpdate: NoAction)
+  imagenes            imagenes?              @relation(fields: [idimagen], references: [idimagen], onDelete: NoAction, onUpdate: NoAction)
+  receta              receta?                @relation(fields: [idreceta], references: [idreceta], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model configuracionproducto {
+  idconfiguracion     Int             @id @default(autoincrement())
+  idproductogeneral   Int             @unique
+  tipopersonalizacion String          @db.VarChar(50)
+  limitetopping       Int?            @default(0)
+  limitesalsa         Int?            @default(0)
+  limiterelleno       Int?            @default(0)
+  limitesabor         Int?            @default(0)
+  permitetoppings     Boolean?        @default(false)
+  permitesalsas       Boolean?        @default(false)
+  permiteadiciones    Boolean?        @default(true)
+  permiterellenos     Boolean?        @default(false)
+  permitesabores      Boolean?        @default(false)
+  productogeneral     productogeneral @relation(fields: [idproductogeneral], references: [idproductogeneral], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([idproductogeneral], map: "idx_configuracion_producto")
 }
 
 model proveedor {

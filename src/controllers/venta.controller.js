@@ -1,5 +1,6 @@
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
+const { restarInventario } = require('./inventariosede.controller');
 
 exports.getAll = async (req, res) => {
   try {
@@ -30,7 +31,6 @@ exports.getAll = async (req, res) => {
   }
 };
 
-// FUNCIÓN PRINCIPAL PARA LISTADO - NO REQUIERE ID
 exports.getListadoResumen = async (req, res) => {
     try {
         console.log('Obteniendo listado resumen de ventas...');
@@ -90,7 +90,6 @@ exports.getListadoResumen = async (req, res) => {
     }
 };
 
-// NUEVA FUNCIÓN PARA OBTENER DETALLE COMPLETO CON ABONOS (/detalles endpoint)
 exports.getDetailsWithAbonos = async (req, res) => {
     try {
         const id = parseInt(req.params.id);
@@ -99,7 +98,7 @@ exports.getDetailsWithAbonos = async (req, res) => {
             return res.status(400).json({ message: 'ID de venta inválido' });
         }
 
-        console.log(`Obteniendo detalle completo con abonos de venta ID: ${id}`);
+        console.log(`📦 Obteniendo detalle completo con abonos de venta ID: ${id}`);
 
         const venta = await prisma.venta.findUnique({
             where: { idventa: id },
@@ -108,7 +107,7 @@ exports.getDetailsWithAbonos = async (req, res) => {
                     select: {
                         nombre: true,
                         apellido: true,
-                        celular: true // Cambiado de telefono a celular
+                        celular: true
                     }
                 },
                 sede: {
@@ -127,13 +126,20 @@ exports.getDetailsWithAbonos = async (req, res) => {
                     include: {
                         productogeneral: {
                             select: {
-                                nombreproducto: true, // Cambiado de nombre a nombreproducto
-                                precioproducto: true  // Cambiado de precio a precioproducto
+                                idproductogeneral: true,
+                                nombreproducto: true,
+                                precioproducto: true,
+                                // ✅ INCLUIR CATEGORÍA
+                                categoriaproducto: {
+                                    select: {
+                                        idcategoriaproducto: true,
+                                        nombrecategoria: true
+                                    }
+                                }
                             }
                         }
                     }
                 },
-                // Incluir abonos a través de la relación pedido
                 pedido: {
                     include: {
                         abonos: {
@@ -154,13 +160,30 @@ exports.getDetailsWithAbonos = async (req, res) => {
             return res.status(404).json({ message: 'Venta no encontrada.' });
         }
 
-        // Extraer abonos de la relación pedido
         let abonos = [];
         if (venta.pedido && venta.pedido.length > 0) {
             abonos = venta.pedido.flatMap(p => p.abonos || []);
         }
 
-        // Transformar la respuesta
+        // ✅ TRANSFORMAR DETALLES INCLUYENDO CATEGORÍA
+        const detallesTransformados = venta.detalleventa.map(detalle => ({
+            iddetalleventa: detalle.iddetalleventa,
+            idventa: detalle.idventa,
+            idproductogeneral: detalle.idproductogeneral,
+            cantidad: detalle.cantidad,
+            preciounitario: parseFloat(detalle.preciounitario || 0),
+            subtotal: parseFloat(detalle.subtotal || 0),
+            iva: parseFloat(detalle.iva || 0),
+            nombreProducto: detalle.productogeneral?.nombreproducto || 'Producto N/A',
+            // ✅ AGREGAR CATEGORÍA AL DETALLE
+            categoria: detalle.productogeneral?.categoriaproducto?.nombrecategoria || 'Otros',
+            productogeneral: {
+                ...detalle.productogeneral,
+                categoria: detalle.productogeneral?.categoriaproducto?.nombrecategoria || 'Otros',
+                categoriaproducto: detalle.productogeneral?.categoriaproducto
+            }
+        }));
+
         const ventaTransformada = {
             idventa: venta.idventa,
             fechaventa: venta.fechaventa,
@@ -171,7 +194,7 @@ exports.getDetailsWithAbonos = async (req, res) => {
             clienteData: venta.clienteData,
             sede: venta.sede,
             estadoVenta: venta.estadoVenta,
-            detalleventa: venta.detalleventa || [],
+            detalleventa: detallesTransformados, // ✅ Usar detalles transformados
             abonos: abonos.map(abono => ({
                 idabono: abono.idabono,
                 idpedido: abono.idpedido,
@@ -179,16 +202,18 @@ exports.getDetailsWithAbonos = async (req, res) => {
                 cantidadpagar: parseFloat(abono.cantidadpagar || 0),
                 TotalPagado: parseFloat(abono.TotalPagado || 0),
                 comprobante_imagen: abono.imagenes?.urlimg || null,
-                fecha: new Date().toISOString().split('T')[0], // Temporal
+                fecha: new Date().toISOString().split('T')[0],
                 anulado: false
             }))
         };
 
-        console.log(`Detalle completo de venta ${id} encontrado con ${abonos.length} abonos`);
+        console.log(`✅ Detalle completo de venta ${id} encontrado con ${abonos.length} abonos`);
+        console.log(`📋 Categorías incluidas en ${detallesTransformados.length} productos`);
+        
         res.json(ventaTransformada);
 
     } catch (error) {
-        console.error('Error en getDetailsWithAbonos:', error);
+        console.error('❌ Error en getDetailsWithAbonos:', error);
         res.status(500).json({ 
             message: 'Error al obtener el detalle completo de la venta.', 
             error: error.message,
@@ -197,7 +222,6 @@ exports.getDetailsWithAbonos = async (req, res) => {
     }
 };
 
-// FUNCIÓN CORREGIDA PARA OBTENER DETALLE POR ID
 exports.getDetailsById = async (req, res) => {
     try {
         const id = parseInt(req.params.id);
@@ -206,7 +230,7 @@ exports.getDetailsById = async (req, res) => {
             return res.status(400).json({ message: 'ID de venta inválido' });
         }
 
-        console.log(`Obteniendo detalle de venta ID: ${id}`);
+        console.log(`🔍 Buscando venta con ID: ${id}`);
 
         const venta = await prisma.venta.findUnique({
             where: { idventa: id },
@@ -215,7 +239,7 @@ exports.getDetailsById = async (req, res) => {
                     select: {
                         nombre: true,
                         apellido: true,
-                        celular: true // Cambiado de telefono a celular
+                        celular: true
                     }
                 },
                 sede: {
@@ -234,8 +258,16 @@ exports.getDetailsById = async (req, res) => {
                     include: {
                         productogeneral: {
                             select: {
-                                nombreproducto: true, // Cambiado de nombre a nombreproducto
-                                precioproducto: true  // Cambiado de precio a precioproducto
+                                idproductogeneral: true,
+                                nombreproducto: true,
+                                precioproducto: true,
+                                // ✅ INCLUIR CATEGORÍA
+                                categoriaproducto: {
+                                    select: {
+                                        idcategoriaproducto: true,
+                                        nombrecategoria: true
+                                    }
+                                }
                             }
                         }
                     }
@@ -244,10 +276,28 @@ exports.getDetailsById = async (req, res) => {
         });
 
         if (!venta) {
-            return res.status(404).json({ message: 'Venta no encontrada.' });
+            return res.status(404).json({ message: `No se encontró la venta con ID: ${id}` });
         }
 
-        // Transformar la respuesta
+        // ✅ TRANSFORMAR DETALLES INCLUYENDO CATEGORÍA
+        const detallesTransformados = venta.detalleventa.map(detalle => ({
+            iddetalleventa: detalle.iddetalleventa,
+            idventa: detalle.idventa,
+            idproductogeneral: detalle.idproductogeneral,
+            cantidad: detalle.cantidad,
+            preciounitario: parseFloat(detalle.preciounitario || 0),
+            subtotal: parseFloat(detalle.subtotal || 0),
+            iva: parseFloat(detalle.iva || 0),
+            nombreProducto: detalle.productogeneral?.nombreproducto || 'Producto N/A',
+            // ✅ AGREGAR CATEGORÍA AL DETALLE
+            categoria: detalle.productogeneral?.categoriaproducto?.nombrecategoria || 'Otros',
+            productogeneral: {
+                ...detalle.productogeneral,
+                categoria: detalle.productogeneral?.categoriaproducto?.nombrecategoria || 'Otros',
+                categoriaproducto: detalle.productogeneral?.categoriaproducto
+            }
+        }));
+
         const ventaTransformada = {
             idventa: venta.idventa,
             fechaventa: venta.fechaventa,
@@ -258,14 +308,16 @@ exports.getDetailsById = async (req, res) => {
             clienteData: venta.clienteData,
             sede: venta.sede,
             estadoVenta: venta.estadoVenta,
-            detalleventa: venta.detalleventa || []
+            detalleventa: detallesTransformados // ✅ Usar detalles transformados
         };
 
-        console.log(`Detalle de venta ${id} encontrado`);
+        console.log(`✅ Detalle de venta ${id} encontrado con ${detallesTransformados.length} productos`);
+        console.log(`📋 Categorías incluidas`);
+        
         res.json(ventaTransformada);
 
     } catch (error) {
-        console.error('Error en getDetailsById:', error);
+        console.error('❌ Error en getDetailsById:', error);
         res.status(500).json({ 
             message: 'Error al obtener el detalle de la venta.', 
             error: error.message,
@@ -274,9 +326,10 @@ exports.getDetailsById = async (req, res) => {
     }
 };
 
+// CREAR VENTA CON DESCUENTO DE INVENTARIO
 exports.create = async (req, res) => {
   try {
-    console.log('Creando nueva venta:', req.body);
+    console.log('🛒 Creando nueva venta:', req.body);
     
     const {
       fechaventa,
@@ -284,36 +337,177 @@ exports.create = async (req, res) => {
       idsede,
       metodopago,
       tipoventa,
-      estadoVentaId = 1, // Default a estado activo
+      estadoVentaId = 1,
       total,
       detalleventa
     } = req.body;
 
-    const nuevaVenta = await prisma.venta.create({
-      data: {
-        fechaventa: new Date(fechaventa),
-        cliente,
-        idsede,
-        metodopago,
-        tipoventa,
-        estadoVentaId,
-        total,
-        detalleventa: {
-          createMany: {
-            data: detalleventa
+    // Validaciones básicas
+    if (!idsede) {
+      return res.status(400).json({ message: 'La sede es requerida' });
+    }
+
+    if (!detalleventa || detalleventa.length === 0) {
+      return res.status(400).json({ message: 'Debe incluir al menos un producto' });
+    }
+
+    if (!tipoventa) {
+      return res.status(400).json({ message: 'El tipo de venta es requerido' });
+    }
+
+    // Normalizar tipo de venta
+    const tipoVentaNormalizado = tipoventa.toLowerCase();
+    const esVentaDirecta = tipoVentaNormalizado === 'directa' || tipoVentaNormalizado === 'venta directa';
+
+    console.log(`📦 Tipo de venta: ${tipoVentaNormalizado}, Es venta directa: ${esVentaDirecta}`);
+
+    const nuevaVenta = await prisma.$transaction(async (tx) => {
+      // SOLO VERIFICAR Y DESCONTAR INVENTARIO SI ES VENTA DIRECTA
+      if (esVentaDirecta) {
+        console.log('🔍 Venta directa detectada - Verificando inventario disponible...');
+        
+        for (const detalle of detalleventa) {
+          const inventario = await tx.inventariosede.findUnique({
+            where: {
+              idproductogeneral_idsede: {
+                idproductogeneral: detalle.idproductogeneral,
+                idsede: idsede
+              }
+            }
+          });
+
+          if (!inventario) {
+            throw new Error(
+              `No hay inventario del producto ID ${detalle.idproductogeneral} en esta sede`
+            );
+          }
+
+          const cantidadDisponible = parseFloat(inventario.cantidad);
+          const cantidadSolicitada = parseFloat(detalle.cantidad || 1);
+
+          if (cantidadDisponible < cantidadSolicitada) {
+            throw new Error(
+              `Inventario insuficiente para producto ID ${detalle.idproductogeneral}. ` +
+              `Disponible: ${cantidadDisponible}, Solicitado: ${cantidadSolicitada}`
+            );
           }
         }
-      },
-      include: {
-        detalleventa: true
+
+        console.log('✅ Inventario verificado para venta directa');
+      } else {
+        console.log('📋 Pedido detectado - No se verificará inventario (se producirá después)');
       }
+
+      let fechaColombia;
+      if (fechaventa) {
+        fechaColombia = new Date(fechaventa);
+      } else {
+        const ahora = new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' });
+        fechaColombia = new Date(ahora);
+        fechaColombia.setHours(0, 0, 0, 0); 
+      }
+
+      const venta = await tx.venta.create({
+        data: {
+          fechaventa: fechaColombia,
+          cliente,
+          idsede,
+          metodopago,
+          tipoventa: tipoVentaNormalizado,
+          estadoVentaId,
+          total
+        }
+      });
+
+      console.log(`✅ Venta creada con ID: ${venta.idventa}`);
+
+      // Crear detalles de venta
+      for (const detalle of detalleventa) {
+        await tx.detalleventa.create({
+          data: {
+            idventa: venta.idventa,
+            idproductogeneral: detalle.idproductogeneral,
+            cantidad: detalle.cantidad || 1,
+            preciounitario: detalle.preciounitario,
+            subtotal: detalle.subtotal,
+            iva: detalle.iva || 0
+          }
+        });
+
+        // SOLO DESCONTAR INVENTARIO SI ES VENTA DIRECTA
+        if (esVentaDirecta) {
+          await tx.inventariosede.update({
+            where: {
+              idproductogeneral_idsede: {
+                idproductogeneral: detalle.idproductogeneral,
+                idsede: idsede
+              }
+            },
+            data: {
+              cantidad: {
+                decrement: parseFloat(detalle.cantidad || 1)
+              }
+            }
+          });
+
+          console.log(
+            `✅ Inventario descontado: Producto ${detalle.idproductogeneral}, ` +
+            `Sede ${idsede}, -${detalle.cantidad}`
+          );
+        }
+      }
+
+      // Retornar venta completa
+      return await tx.venta.findUnique({
+        where: { idventa: venta.idventa },
+        include: {
+          detalleventa: {
+            include: {
+              productogeneral: {
+                select: {
+                  nombreproducto: true,
+                  precioproducto: true
+                }
+              }
+            }
+          },
+          clienteData: {
+            select: {
+              nombre: true,
+              apellido: true
+            }
+          },
+          sede: {
+            select: {
+              nombre: true
+            }
+          }
+        }
+      });
     });
 
-    console.log('Venta creada con ID:', nuevaVenta.idventa);
-    res.status(201).json(nuevaVenta);
+    const mensaje = esVentaDirecta 
+      ? `Venta directa creada. Inventario actualizado.`
+      : `Pedido creado. El producto se producirá después del 50% de abono.`;
+
+    console.log(`✅ ${mensaje}`);
+    
+    res.status(201).json({
+      ...nuevaVenta,
+      mensaje
+    });
 
   } catch (error) {
-    console.error('Error al crear venta:', error);
+    console.error('❌ Error al crear venta:', error);
+    
+    // Si el error es de inventario insuficiente, devolver 400
+    if (error.message.includes('inventario') || error.message.includes('Inventario')) {
+      return res.status(400).json({ 
+        message: error.message,
+        tipo: 'INVENTARIO_INSUFICIENTE'
+      });
+    }
+
     res.status(500).json({ 
       message: 'Error al crear venta', 
       error: error.message,
@@ -321,8 +515,6 @@ exports.create = async (req, res) => {
     });
   }
 };
-
-// getById PARA USO INDIVIDUAL - REQUIERE ID
 exports.getById = async (req, res) => {
   try {
     const id = parseInt(req.params.id);
