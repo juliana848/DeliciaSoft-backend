@@ -49,6 +49,16 @@ model catalogosabor {
   detalleadiciones detalleadiciones[]
 }
 
+model catalogosalsas {
+  idsalsa          Int                @id @default(autoincrement())
+  nombre           String?            @db.VarChar(20)
+  precioadicion    Decimal?           @db.Decimal(10, 2)
+  idinsumos        Int?
+  estado           Boolean?
+  insumos          insumos?           @relation(fields: [idinsumos], references: [idinsumo], onDelete: NoAction, onUpdate: NoAction)
+  detalleadiciones detalleadiciones[]
+}
+
 model categoriainsumos {
   idcategoriainsumos Int       @id @default(autoincrement())
   nombrecategoria    String?   @db.VarChar(20)
@@ -106,6 +116,8 @@ model detalleadiciones {
   total              Decimal?           @db.Decimal(10, 2)
   idsabor            Int?
   idrelleno          Int?
+  idsalsa            Int?
+  catalogosalsas     catalogosalsas?    @relation(fields: [idsalsa], references: [idsalsa], onDelete: NoAction, onUpdate: NoAction)
   catalogoadiciones  catalogoadiciones? @relation(fields: [idadiciones], references: [idadiciones], onDelete: NoAction, onUpdate: NoAction)
   detalleventa       detalleventa?      @relation(fields: [iddetalleventa], references: [iddetalleventa], onDelete: NoAction, onUpdate: NoAction)
   catalogorelleno    catalogorelleno?   @relation(fields: [idrelleno], references: [idrelleno], onDelete: NoAction, onUpdate: NoAction)
@@ -128,6 +140,7 @@ model detalleproduccion {
   idproductogeneral   Int?
   idproduccion        Int?
   cantidadproducto    Decimal?         @db.Decimal(10, 2)
+  sede                String?          @db.VarChar(50)
   produccion          produccion?      @relation(fields: [idproduccion], references: [idproduccion], onDelete: NoAction, onUpdate: NoAction)
   productogeneral     productogeneral? @relation(fields: [idproductogeneral], references: [idproductogeneral], onDelete: NoAction, onUpdate: NoAction)
 }
@@ -184,6 +197,7 @@ model insumos {
   catalogoadiciones  catalogoadiciones[]
   catalogorelleno    catalogorelleno[]
   catalogosabor      catalogosabor[]
+  catalogosalsas     catalogosalsas[]
   detallecompra      detallecompra[]
   detallereceta      detallereceta[]
   categoriainsumos   categoriainsumos?   @relation(fields: [idcategoriainsumos], references: [idcategoriainsumos], onDelete: NoAction, onUpdate: NoAction)
@@ -192,13 +206,12 @@ model insumos {
 }
 
 model pedido {
-  idpedido             Int       @id @default(autoincrement())
-  idventa              Int?
-  observaciones        String?   @db.VarChar(100)
-  fechaentrega         DateTime? @db.Date
-  mensajepersonalizado String?   @db.VarChar(100)
-  abonos               abonos[]
-  venta                venta?    @relation(fields: [idventa], references: [idventa], onDelete: NoAction, onUpdate: NoAction)
+  idpedido      Int       @id @default(autoincrement())
+  idventa       Int?
+  observaciones String?   @db.VarChar(100)
+  fechaentrega  DateTime? @db.Date
+  abonos        abonos[]
+  venta         venta?    @relation(fields: [idventa], references: [idventa], onDelete: NoAction, onUpdate: NoAction)
 }
 
 model permisos {
@@ -213,11 +226,15 @@ model permisos {
 
 model produccion {
   idproduccion      Int                 @id @default(autoincrement())
-  fechapedido       DateTime?           @db.Date
-  fechaentrega      DateTime?           @db.Date
-  numeropedido      String?             @db.VarChar(20)
-  estadoproduccion  Int?
-  TipoProduccion    String?             @db.VarChar(20)
+  fechapedido       DateTime?
+  fechaentrega      DateTime?
+  numeropedido      String?
+  estadoproduccion  Int                 @default(2)
+  TipoProduccion    String
+  nombreproduccion  String
+  createdAt         DateTime            @default(now())
+  estadopedido      Int?
+  updatedAt         DateTime?
   detalleproduccion detalleproduccion[]
   produccion_estado produccion_estado[]
 }
@@ -232,19 +249,21 @@ model produccion_estado {
 }
 
 model productogeneral {
-  idproductogeneral   Int                 @id @default(autoincrement())
-  nombreproducto      String?             @db.VarChar(20)
-  precioproducto      Decimal?            @db.Decimal(10, 2)
-  cantidadproducto    Decimal?            @db.Decimal(10, 2)
-  estado              Boolean?
-  idcategoriaproducto Int?
-  idimagen            Int?
-  idreceta            Int?
-  detalleproduccion   detalleproduccion[]
-  detalleventa        detalleventa[]
-  categoriaproducto   categoriaproducto?  @relation(fields: [idcategoriaproducto], references: [idcategoriaproducto], onDelete: NoAction, onUpdate: NoAction)
-  imagenes            imagenes?           @relation(fields: [idimagen], references: [idimagen], onDelete: NoAction, onUpdate: NoAction)
-  receta              receta?             @relation(fields: [idreceta], references: [idreceta], onDelete: NoAction, onUpdate: NoAction)
+  idproductogeneral     Int                    @id @default(autoincrement())
+  nombreproducto        String?                @db.VarChar(20)
+  precioproducto        Decimal?               @db.Decimal(10, 2)
+  cantidadproducto      Decimal?               @db.Decimal(10, 2)
+  estado                Boolean?
+  idcategoriaproducto   Int?
+  idimagen              Int?
+  idreceta              Int?
+  configuracionproducto configuracionproducto?
+  detalleproduccion     detalleproduccion[]
+  detalleventa          detalleventa[]
+  inventariosede        inventariosede[]
+  categoriaproducto     categoriaproducto?     @relation(fields: [idcategoriaproducto], references: [idcategoriaproducto], onDelete: NoAction, onUpdate: NoAction)
+  imagenes              imagenes?              @relation(fields: [idimagen], references: [idimagen], onDelete: NoAction, onUpdate: NoAction)
+  receta                receta?                @relation(fields: [idreceta], references: [idreceta], onDelete: NoAction, onUpdate: NoAction)
 }
 
 model proveedor {
@@ -296,13 +315,14 @@ model rolpermiso {
 }
 
 model sede {
-  idsede    Int      @id @default(autoincrement())
-  nombre    String?  @db.VarChar(20)
-  telefono  String?  @db.VarChar(20)
-  direccion String?  @db.VarChar(20)
-  estado    Boolean?
-  imagenUrl String?  @db.VarChar(255)
-  venta     venta[]
+  idsede         Int              @id @default(autoincrement())
+  nombre         String?          @db.VarChar(20)
+  telefono       String?          @db.VarChar(20)
+  direccion      String?          @db.VarChar(20)
+  estado         Boolean?
+  imagenUrl      String?          @db.VarChar(255)
+  inventariosede inventariosede[]
+  venta          venta[]
 }
 
 model unidadmedida {
@@ -350,4 +370,36 @@ model estadoventa {
   idestadoventa Int     @id @default(autoincrement())
   nombre_estado String  @db.VarChar(50)
   ventas        venta[] @relation("VentaEstado")
+}
+
+model configuracionproducto {
+  idconfiguracion     Int             @id @default(autoincrement())
+  idproductogeneral   Int             @unique
+  tipopersonalizacion String          @db.VarChar(50)
+  limitetopping       Int?            @default(0)
+  limitesalsa         Int?            @default(0)
+  limiterelleno       Int?            @default(0)
+  limitesabor         Int?            @default(0)
+  permitetoppings     Boolean?        @default(false)
+  permitesalsas       Boolean?        @default(false)
+  permiteadiciones    Boolean?        @default(true)
+  permiterellenos     Boolean?        @default(false)
+  permitesabores      Boolean?        @default(false)
+  productogeneral     productogeneral @relation(fields: [idproductogeneral], references: [idproductogeneral], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([idproductogeneral], map: "idx_configuracion_producto")
+}
+
+model inventariosede {
+  idinventariosede   Int             @id @default(autoincrement())
+  idproductogeneral  Int
+  idsede             Int
+  cantidad           Decimal         @db.Decimal(10, 2)
+  fechaactualizacion DateTime        @default(now())
+  productogeneral    productogeneral @relation(fields: [idproductogeneral], references: [idproductogeneral], onDelete: Cascade)
+  sede               sede            @relation(fields: [idsede], references: [idsede], onDelete: Cascade)
+
+  @@unique([idproductogeneral, idsede])
+  @@index([idproductogeneral])
+  @@index([idsede])
 }
