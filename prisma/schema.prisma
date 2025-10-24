@@ -405,35 +405,3 @@ model estadoventa {
   nombre_estado String  @db.VarChar(50)
   ventas        venta[] @relation("VentaEstado")
 }
-
-model configuracionproducto {
-  idconfiguracion     Int             @id @default(autoincrement())
-  idproductogeneral   Int             @unique
-  tipopersonalizacion String          @db.VarChar(50)
-  limitetopping       Int?            @default(0)
-  limitesalsa         Int?            @default(0)
-  limiterelleno       Int?            @default(0)
-  limitesabor         Int?            @default(0)
-  permitetoppings     Boolean?        @default(false)
-  permitesalsas       Boolean?        @default(false)
-  permiteadiciones    Boolean?        @default(true)
-  permiterellenos     Boolean?        @default(false)
-  permitesabores      Boolean?        @default(false)
-  productogeneral     productogeneral @relation(fields: [idproductogeneral], references: [idproductogeneral], onDelete: Cascade, onUpdate: NoAction)
-
-  @@index([idproductogeneral], map: "idx_configuracion_producto")
-}
-
-model inventariosede {
-  idinventariosede   Int             @id @default(autoincrement())
-  idproductogeneral  Int
-  idsede             Int
-  cantidad           Decimal         @db.Decimal(10, 2)
-  fechaactualizacion DateTime        @default(now())
-  productogeneral    productogeneral @relation(fields: [idproductogeneral], references: [idproductogeneral], onDelete: Cascade)
-  sede               sede            @relation(fields: [idsede], references: [idsede], onDelete: Cascade)
-
-  @@unique([idproductogeneral, idsede])
-  @@index([idproductogeneral])
-  @@index([idsede])
-}

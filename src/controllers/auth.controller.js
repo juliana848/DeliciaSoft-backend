@@ -1,5 +1,8 @@
 const { PrismaClient } = require('@prisma/client');
+
 const jwt = require('jsonwebtoken');
+
+
 // Usar sib-api-v3-sdk que es más estable
 const SibApiV3Sdk = require('sib-api-v3-sdk');
 
@@ -91,10 +94,12 @@ function generateJwtToken(correo, userType) {
   if (!process.env.JWT_SECRET) {
     throw new Error('JWT_SECRET no configurado');
   }
-  return jwt.sign({ correo, userType }, process.env.JWT_SECRET, { expiresIn: '2h' });
+  return jwt.sign({ correo, userType }, process.env.JWT_SECRET, { expiresIn: '5m' });
 }
 
 // Plantilla HTML mejorada para Brevo
+
+
 function getVerificationEmailTemplate(code) {
   return `
     <!DOCTYPE html>
@@ -167,7 +172,6 @@ function getVerificationEmailTemplate(code) {
 }
 
 module.exports = {
-  // Login directo sin código de verificación  
   async directLogin(req, res) {
     try {
       const { correo, password } = req.body;
@@ -182,7 +186,6 @@ module.exports = {
       let user = null;
       let actualUserType = '';
 
-      // Buscar en usuarios primero
       try {
         user = await prisma.usuarios.findFirst({ 
           where: { correo, estado: true } 
@@ -197,7 +200,6 @@ module.exports = {
         console.log('Error buscando en usuarios:', error.message);
       }
 
-      // Si no se encontró, buscar en clientes
       if (!user) {
         try {
           user = await prisma.cliente.findFirst({ 
@@ -478,7 +480,6 @@ module.exports = {
         });
       }
 
-      // Verificar si usuario existe
       let userExists = false;
       let userType = '';
       
