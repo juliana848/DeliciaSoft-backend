@@ -129,7 +129,6 @@ exports.getDetailsWithAbonos = async (req, res) => {
                                 idproductogeneral: true,
                                 nombreproducto: true,
                                 precioproducto: true,
-                                // ✅ INCLUIR CATEGORÍA
                                 categoriaproducto: {
                                     select: {
                                         idcategoriaproducto: true,
@@ -161,11 +160,16 @@ exports.getDetailsWithAbonos = async (req, res) => {
         }
 
         let abonos = [];
+        let fechaEntrega = null;
+        let observaciones = null;
+        
         if (venta.pedido && venta.pedido.length > 0) {
-            abonos = venta.pedido.flatMap(p => p.abonos || []);
+            const pedidoData = venta.pedido[0];
+            abonos = pedidoData.abonos || [];
+            fechaEntrega = pedidoData.fechaentrega;
+            observaciones = pedidoData.observaciones;
         }
 
-        // ✅ TRANSFORMAR DETALLES INCLUYENDO CATEGORÍA
         const detallesTransformados = venta.detalleventa.map(detalle => ({
             iddetalleventa: detalle.iddetalleventa,
             idventa: detalle.idventa,
@@ -175,7 +179,6 @@ exports.getDetailsWithAbonos = async (req, res) => {
             subtotal: parseFloat(detalle.subtotal || 0),
             iva: parseFloat(detalle.iva || 0),
             nombreProducto: detalle.productogeneral?.nombreproducto || 'Producto N/A',
-            // ✅ AGREGAR CATEGORÍA AL DETALLE
             categoria: detalle.productogeneral?.categoriaproducto?.nombrecategoria || 'Otros',
             productogeneral: {
                 ...detalle.productogeneral,
@@ -194,7 +197,9 @@ exports.getDetailsWithAbonos = async (req, res) => {
             clienteData: venta.clienteData,
             sede: venta.sede,
             estadoVenta: venta.estadoVenta,
-            detalleventa: detallesTransformados, // ✅ Usar detalles transformados
+            detalleventa: detallesTransformados,
+            fechaEntrega: fechaEntrega,
+            observaciones: observaciones,
             abonos: abonos.map(abono => ({
                 idabono: abono.idabono,
                 idpedido: abono.idpedido,
@@ -208,7 +213,6 @@ exports.getDetailsWithAbonos = async (req, res) => {
         };
 
         console.log(`✅ Detalle completo de venta ${id} encontrado con ${abonos.length} abonos`);
-        console.log(`📋 Categorías incluidas en ${detallesTransformados.length} productos`);
         
         res.json(ventaTransformada);
 
@@ -261,7 +265,6 @@ exports.getDetailsById = async (req, res) => {
                                 idproductogeneral: true,
                                 nombreproducto: true,
                                 precioproducto: true,
-                                // ✅ INCLUIR CATEGORÍA
                                 categoriaproducto: {
                                     select: {
                                         idcategoriaproducto: true,
@@ -271,6 +274,13 @@ exports.getDetailsById = async (req, res) => {
                             }
                         }
                     }
+                },
+                pedido: {
+                    select: {
+                        idpedido: true,
+                        fechaentrega: true,
+                        observaciones: true
+                    }
                 }
             }
         });
@@ -279,7 +289,6 @@ exports.getDetailsById = async (req, res) => {
             return res.status(404).json({ message: `No se encontró la venta con ID: ${id}` });
         }
 
-        // ✅ TRANSFORMAR DETALLES INCLUYENDO CATEGORÍA
         const detallesTransformados = venta.detalleventa.map(detalle => ({
             iddetalleventa: detalle.iddetalleventa,
             idventa: detalle.idventa,
@@ -289,7 +298,6 @@ exports.getDetailsById = async (req, res) => {
             subtotal: parseFloat(detalle.subtotal || 0),
             iva: parseFloat(detalle.iva || 0),
             nombreProducto: detalle.productogeneral?.nombreproducto || 'Producto N/A',
-            // ✅ AGREGAR CATEGORÍA AL DETALLE
             categoria: detalle.productogeneral?.categoriaproducto?.nombrecategoria || 'Otros',
             productogeneral: {
                 ...detalle.productogeneral,
@@ -308,11 +316,15 @@ exports.getDetailsById = async (req, res) => {
             clienteData: venta.clienteData,
             sede: venta.sede,
             estadoVenta: venta.estadoVenta,
-            detalleventa: detallesTransformados // ✅ Usar detalles transformados
+            detalleventa: detallesTransformados,
+            pedidoInfo: venta.pedido && venta.pedido.length > 0 ? {
+                idpedido: venta.pedido[0].idpedido,
+                fechaentrega: venta.pedido[0].fechaentrega,
+                observaciones: venta.pedido[0].observaciones
+            } : null
         };
 
-        console.log(`✅ Detalle de venta ${id} encontrado con ${detallesTransformados.length} productos`);
-        console.log(`📋 Categorías incluidas`);
+        console.log(`✅ Detalle de venta ${id} encontrado`);
         
         res.json(ventaTransformada);
 
@@ -326,7 +338,7 @@ exports.getDetailsById = async (req, res) => {
     }
 };
 
-// CREAR VENTA CON DESCUENTO DE INVENTARIO
+// ✅ CREAR VENTA CON PEDIDO AUTOMÁTICO SI ES TIPO "PEDIDO"
 exports.create = async (req, res) => {
   try {
     console.log('🛒 Creando nueva venta:', req.body);
@@ -339,7 +351,9 @@ exports.create = async (req, res) => {
       tipoventa,
       estadoVentaId = 1,
       total,
-      detalleventa
+      detalleventa,
+      fechaentrega, // ✅ NUEVO: Fecha de entrega para pedidos
+      observaciones // ✅ NUEVO: Observaciones para pedidos
     } = req.body;
 
     // Validaciones básicas
@@ -358,8 +372,16 @@ exports.create = async (req, res) => {
     // Normalizar tipo de venta
     const tipoVentaNormalizado = tipoventa.toLowerCase();
     const esVentaDirecta = tipoVentaNormalizado === 'directa' || tipoVentaNormalizado === 'venta directa';
+    const esPedido = tipoVentaNormalizado === 'pedido';
 
-    console.log(`📦 Tipo de venta: ${tipoVentaNormalizado}, Es venta directa: ${esVentaDirecta}`);
+    // ✅ VALIDAR FECHA DE ENTREGA PARA PEDIDOS
+    if (esPedido && !fechaentrega) {
+      return res.status(400).json({ 
+        message: 'La fecha de entrega es requerida para pedidos' 
+      });
+    }
+
+    console.log(`📦 Tipo de venta: ${tipoVentaNormalizado}, Es venta directa: ${esVentaDirecta}, Es pedido: ${esPedido}`);
 
     const nuevaVenta = await prisma.$transaction(async (tx) => {
       // SOLO VERIFICAR Y DESCONTAR INVENTARIO SI ES VENTA DIRECTA
@@ -407,6 +429,7 @@ exports.create = async (req, res) => {
         fechaColombia.setHours(0, 0, 0, 0); 
       }
 
+      // Crear la venta
       const venta = await tx.venta.create({
         data: {
           fechaventa: fechaColombia,
@@ -457,7 +480,22 @@ exports.create = async (req, res) => {
         }
       }
 
-      // Retornar venta completa
+      // ✅ SI ES PEDIDO, CREAR EL REGISTRO EN LA TABLA PEDIDO AUTOMÁTICAMENTE
+      if (esPedido) {
+        const fechaEntregaFormateada = fechaentrega ? new Date(fechaentrega) : null;
+        
+        const pedido = await tx.pedido.create({
+          data: {
+            idventa: venta.idventa,
+            fechaentrega: fechaEntregaFormateada,
+            observaciones: observaciones || null
+          }
+        });
+
+        console.log(`✅ Pedido creado automáticamente con ID: ${pedido.idpedido} y fecha de entrega: ${fechaentrega}`);
+      }
+
+      // Retornar venta completa con relaciones
       return await tx.venta.findUnique({
         where: { idventa: venta.idventa },
         include: {
@@ -481,14 +519,21 @@ exports.create = async (req, res) => {
             select: {
               nombre: true
             }
+          },
+          pedido: {
+            select: {
+              idpedido: true,
+              fechaentrega: true,
+              observaciones: true
+            }
           }
         }
       });
     });
 
     const mensaje = esVentaDirecta 
-      ? `Venta directa creada. Inventario actualizado.`
-      : `Pedido creado. El producto se producirá después del 50% de abono.`;
+      ? `Venta directa creada exitosamente. Inventario actualizado.`
+      : `Pedido creado exitosamente. Fecha de entrega: ${fechaentrega}. El producto se producirá después del 50% de abono.`;
 
     console.log(`✅ ${mensaje}`);
     
@@ -500,7 +545,6 @@ exports.create = async (req, res) => {
   } catch (error) {
     console.error('❌ Error al crear venta:', error);
     
-    // Si el error es de inventario insuficiente, devolver 400
     if (error.message.includes('inventario') || error.message.includes('Inventario')) {
       return res.status(400).json({ 
         message: error.message,
@@ -515,6 +559,7 @@ exports.create = async (req, res) => {
     });
   }
 };
+
 exports.getById = async (req, res) => {
   try {
     const id = parseInt(req.params.id);
@@ -543,6 +588,13 @@ exports.getById = async (req, res) => {
         sede: {
           select: {
             nombre: true
+          }
+        },
+        pedido: {
+          select: {
+            idpedido: true,
+            fechaentrega: true,
+            observaciones: true
           }
         }
       }
