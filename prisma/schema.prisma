@@ -117,11 +117,11 @@ model detalleadiciones {
   idsabor            Int?
   idrelleno          Int?
   idsalsa            Int?
-  catalogosalsas     catalogosalsas?    @relation(fields: [idsalsa], references: [idsalsa], onDelete: NoAction, onUpdate: NoAction)
   catalogoadiciones  catalogoadiciones? @relation(fields: [idadiciones], references: [idadiciones], onDelete: NoAction, onUpdate: NoAction)
   detalleventa       detalleventa?      @relation(fields: [iddetalleventa], references: [iddetalleventa], onDelete: NoAction, onUpdate: NoAction)
   catalogorelleno    catalogorelleno?   @relation(fields: [idrelleno], references: [idrelleno], onDelete: NoAction, onUpdate: NoAction)
   catalogosabor      catalogosabor?     @relation(fields: [idsabor], references: [idsabor], onDelete: NoAction, onUpdate: NoAction)
+  catalogosalsas     catalogosalsas?    @relation(fields: [idsalsa], references: [idsalsa], onDelete: NoAction, onUpdate: NoAction)
 }
 
 model detallecompra {

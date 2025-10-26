@@ -39,6 +39,9 @@ app.use('/api/catalogo-relleno', catalogoRellenoRoutes);
 const catalogoSaborRoutes = require('./routes/catalogoSabor.routes');
 app.use('/api/catalogo-sabor', catalogoSaborRoutes);
 
+const catalogoSaborRoutes = require('./routes/catalogoSalsas.routes');
+app.use('/api/catalogo-salsas', catalogoSalsasRoutes);
+
 const categoriaInsumosRoutes = require('./routes/categoriaInsumos.routes');
 app.use('/api/categoria-insumos', categoriaInsumosRoutes);
 
