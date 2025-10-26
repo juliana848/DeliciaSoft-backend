@@ -29,6 +29,16 @@ model catalogoadiciones {
   detalleadiciones detalleadiciones[]
 }
 
+model catalogotoppings {
+  idtoppings     Int                @id @default(autoincrement())
+  idinsumos        Int?
+  nombre           String?            @db.VarChar(20)
+  precioadicion    Decimal?           @db.Decimal(10, 2)
+  estado           Boolean?
+  insumos          insumos?           @relation(fields: [idinsumos], references: [idinsumo], onDelete: NoAction, onUpdate: NoAction)
+  detalleadiciones detalleadiciones[]
+}
+
 model catalogorelleno {
   idrelleno        Int                @id @default(autoincrement())
   nombre           String?            @db.VarChar(20)
@@ -117,11 +127,13 @@ model detalleadiciones {
   idsabor            Int?
   idrelleno          Int?
   idsalsa            Int?
+  idtoppings         Int?    
   catalogoadiciones  catalogoadiciones? @relation(fields: [idadiciones], references: [idadiciones], onDelete: NoAction, onUpdate: NoAction)
   detalleventa       detalleventa?      @relation(fields: [iddetalleventa], references: [iddetalleventa], onDelete: NoAction, onUpdate: NoAction)
   catalogorelleno    catalogorelleno?   @relation(fields: [idrelleno], references: [idrelleno], onDelete: NoAction, onUpdate: NoAction)
   catalogosabor      catalogosabor?     @relation(fields: [idsabor], references: [idsabor], onDelete: NoAction, onUpdate: NoAction)
   catalogosalsas     catalogosalsas?    @relation(fields: [idsalsa], references: [idsalsa], onDelete: NoAction, onUpdate: NoAction)
+  catalogotoppings   catalogotoppings?  @relation(fields: [idtoppings], references: [idtoppings], onDelete: NoAction, onUpdate: NoAction)
 }
 
 model detallecompra {
@@ -195,6 +207,7 @@ model insumos {
   cantidad           Decimal?            @db.Decimal(10, 2)
   precio             Decimal?            @db.Decimal(10, 2)
   catalogoadiciones  catalogoadiciones[]
+  catalogotoppings   catalogotoppings[] 
   catalogorelleno    catalogorelleno[]
   catalogosabor      catalogosabor[]
   catalogosalsas     catalogosalsas[]
