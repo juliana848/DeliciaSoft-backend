@@ -33,7 +33,7 @@ app.use('/api/auth', authRoutes);
 const catalogoAdicionesRoutes = require('./routes/catalogoAdiciones.routes');
 app.use('/api/catalogo-adiciones', catalogoAdicionesRoutes);
 
-const catalogoAdicionesRoutes = require('./routes/catalogoToppings.routes');
+const catalogoToppingsRoutes = require('./routes/catalogoToppings.routes');
 app.use('/api/catalogo-toppings', catalogoToppingsRoutes);
 
 const catalogoRellenoRoutes = require('./routes/catalogoRelleno.routes');
@@ -42,7 +42,7 @@ app.use('/api/catalogo-relleno', catalogoRellenoRoutes);
 const catalogoSaborRoutes = require('./routes/catalogoSabor.routes');
 app.use('/api/catalogo-sabor', catalogoSaborRoutes);
 
-const catalogoSaborRoutes = require('./routes/catalogoSalsas.routes');
+const catalogoSalsasRoutes = require('./routes/catalogoSalsas.routes');
 app.use('/api/catalogo-salsas', catalogoSalsasRoutes);
 
 const categoriaInsumosRoutes = require('./routes/categoriaInsumos.routes');
