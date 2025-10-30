@@ -542,6 +542,8 @@ module.exports = {
         isPasswordReset: true
       };
 
+      console.log(`🔑 Código de recuperación generado para ${correo}: ${code}`);
+
       try {
         await sendBrevoEmail(
           correo, 
@@ -549,34 +551,29 @@ module.exports = {
           getVerificationEmailTemplate(code)
         );
         
+        // 🔥 SIEMPRE devolver el código (desarrollo Y producción)
         const response = {
           success: true,
           message: 'Código de recuperación enviado',
-          provider: 'Brevo'
+          codigo: code, // 🔥 CAMBIO: Siempre incluir
+          provider: 'Brevo',
+          emailSent: true
         };
 
-        if (process.env.NODE_ENV !== 'production') {
-          response.codigo = code;
-        }
-
+        console.log('✅ Código enviado, devolviendo:', response);
         res.json(response);
         
       } catch (emailError) {
         console.error('❌ Error enviando email reset:', emailError);
         
-        if (process.env.NODE_ENV !== 'production') {
-          res.json({ 
-            success: true,
-            message: 'Código generado (modo desarrollo)',
-            codigo: code,
-            emailSent: false
-          });
-        } else {
-          res.status(500).json({
-            success: false,
-            message: 'Error enviando código de recuperación'
-          });
-        }
+        // Fallback: devolver código aunque no se envíe email
+        res.json({ 
+          success: true,
+          message: 'Código generado (email no enviado)',
+          codigo: code, // 🔥 Siempre incluir
+          emailSent: false,
+          provider: 'Fallback'
+        });
       }
       
     } catch (error) {
