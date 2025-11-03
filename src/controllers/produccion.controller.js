@@ -489,6 +489,137 @@ exports.create = async (req, res) => {
   }
 };
 
+
+// Actualizar producción completa
+exports.update = async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const data = req.body;
+
+    const produccionExiste = await prisma.produccion.findUnique({
+      where: { idproduccion: id }
+    });
+
+    if (!produccionExiste) {
+      return res.status(404).json({ message: 'Producción no encontrada' });
+    }
+
+    // Preparar datos para actualizar
+    const datosActualizar = {};
+    
+    if (data.nombreproduccion) datosActualizar.nombreproduccion = data.nombreproduccion;
+    if (data.fechapedido) datosActualizar.fechapedido = new Date(data.fechapedido);
+    if (data.fechaentrega) datosActualizar.fechaentrega = new Date(data.fechaentrega);
+    if (data.estadoproduccion !== undefined) datosActualizar.estadoproduccion = parseInt(data.estadoproduccion);
+    if (data.estadopedido !== undefined) datosActualizar.estadopedido = parseInt(data.estadopedido);
+    if (data.numeropedido) datosActualizar.numeropedido = data.numeropedido;
+
+    const produccionActualizada = await prisma.produccion.update({
+      where: { idproduccion: id },
+      data: datosActualizar
+    });
+
+    console.log('✅ Producción actualizada:', produccionActualizada);
+    res.json(produccionActualizada);
+
+  } catch (error) {
+    console.error('❌ Error al actualizar producción:', error);
+    res.status(500).json({ 
+      message: 'Error al actualizar producción', 
+      error: error.message 
+    });
+  }
+};
+
+// Actualizar solo estados (PATCH)
+exports.updateEstado = async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const { estadoproduccion, estadopedido } = req.body;
+
+    console.log(`🔄 Actualizando estados para producción ${id}:`, { estadoproduccion, estadopedido });
+
+    const produccionExiste = await prisma.produccion.findUnique({
+      where: { idproduccion: id }
+    });
+
+    if (!produccionExiste) {
+      return res.status(404).json({ message: 'Producción no encontrada' });
+    }
+
+    // Preparar solo los estados que vienen en el request
+    const datosActualizar = {};
+    if (estadoproduccion !== undefined) {
+      datosActualizar.estadoproduccion = parseInt(estadoproduccion);
+    }
+    if (estadopedido !== undefined) {
+      datosActualizar.estadopedido = parseInt(estadopedido);
+    }
+
+    const produccionActualizada = await prisma.produccion.update({
+      where: { idproduccion: id },
+      data: datosActualizar
+    });
+
+    console.log('✅ Estados actualizados correctamente');
+    res.json(produccionActualizada);
+
+  } catch (error) {
+    console.error('❌ Error al actualizar estado:', error);
+    res.status(500).json({ 
+      message: 'Error al actualizar estado', 
+      error: error.message 
+    });
+  }
+};
+
+// Eliminar producción (CORREGIDO - elimina detalles primero)
+exports.remove = async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    
+    console.log(`🗑️ Intentando eliminar producción con ID: ${id}`);
+
+    const produccionExiste = await prisma.produccion.findUnique({ 
+      where: { idproduccion: id },
+      include: {
+        detalleproduccion: true
+      }
+    });
+    
+    if (!produccionExiste) {
+      return res.status(404).json({ message: 'Producción no encontrada' });
+    }
+
+    // 🔥 SOLUCIÓN: Usar transacción para eliminar detalles primero
+    await prisma.$transaction(async (tx) => {
+      // 1. Eliminar todos los detalles de producción
+      await tx.detalleproduccion.deleteMany({
+        where: { idproduccion: id }
+      });
+      console.log(`✅ Detalles eliminados: ${produccionExiste.detalleproduccion.length}`);
+
+      // 2. Eliminar la producción
+      await tx.produccion.delete({ 
+        where: { idproduccion: id } 
+      });
+      console.log('✅ Producción eliminada');
+    });
+
+    res.json({ 
+      success: true,
+      message: 'Producción eliminada correctamente' 
+    });
+
+  } catch (error) {
+    console.error('❌ Error al eliminar producción:', error);
+    res.status(500).json({ 
+      message: 'Error al eliminar producción', 
+      error: error.message 
+    });
+  }
+};
+
 // Eliminar producción
 exports.remove = async (req, res) => {
   try {
