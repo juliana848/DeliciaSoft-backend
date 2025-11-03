@@ -102,16 +102,26 @@ exports.getDetailsWithAbonos = async (req, res) => {
 
         const venta = await prisma.venta.findUnique({
             where: { idventa: id },
-            include: {
+            select: {
+                idventa: true,
+                fechaventa: true,
+                total: true,
+                metodopago: true,
+                tipoventa: true,
+                estadoVentaId: true,
+                cliente: true,  // ✅✅✅ CRÍTICO: Incluir campo cliente
                 clienteData: {
                     select: {
+                        idcliente: true,
                         nombre: true,
                         apellido: true,
-                        celular: true
+                        celular: true,
+                        correo: true
                     }
                 },
                 sede: {
                     select: {
+                        idsede: true,
                         nombre: true,
                         direccion: true
                     }
@@ -162,12 +172,14 @@ exports.getDetailsWithAbonos = async (req, res) => {
         let abonos = [];
         let fechaEntrega = null;
         let observaciones = null;
+        let mensajePersonalizado = null;
         
         if (venta.pedido && venta.pedido.length > 0) {
             const pedidoData = venta.pedido[0];
             abonos = pedidoData.abonos || [];
             fechaEntrega = pedidoData.fechaentrega;
             observaciones = pedidoData.observaciones;
+            mensajePersonalizado = pedidoData.mensajePersonalizado;
         }
 
         const detallesTransformados = venta.detalleventa.map(detalle => ({
@@ -194,12 +206,14 @@ exports.getDetailsWithAbonos = async (req, res) => {
             metodopago: venta.metodopago,
             tipoventa: venta.tipoventa,
             estadoVentaId: venta.estadoVentaId,
+            cliente: venta.cliente,  // ✅✅✅ CAMPO CRÍTICO
             clienteData: venta.clienteData,
             sede: venta.sede,
             estadoVenta: venta.estadoVenta,
             detalleventa: detallesTransformados,
             fechaEntrega: fechaEntrega,
             observaciones: observaciones,
+            mensajePersonalizado: mensajePersonalizado,
             abonos: abonos.map(abono => ({
                 idabono: abono.idabono,
                 idpedido: abono.idpedido,
@@ -212,7 +226,7 @@ exports.getDetailsWithAbonos = async (req, res) => {
             }))
         };
 
-        console.log(`✅ Detalle completo de venta ${id} encontrado con ${abonos.length} abonos`);
+        console.log(`✅ Detalle completo de venta ${id} con ${abonos.length} abonos - Cliente ID: ${venta.cliente}`);
         
         res.json(ventaTransformada);
 
@@ -238,16 +252,26 @@ exports.getDetailsById = async (req, res) => {
 
         const venta = await prisma.venta.findUnique({
             where: { idventa: id },
-            include: {
+            select: {
+                idventa: true,
+                fechaventa: true,
+                total: true,
+                metodopago: true,
+                tipoventa: true,
+                estadoVentaId: true,
+                cliente: true,  // ✅✅✅ CRÍTICO: Incluir el campo cliente
                 clienteData: {
                     select: {
+                        idcliente: true,
                         nombre: true,
                         apellido: true,
-                        celular: true
+                        celular: true,
+                        correo: true
                     }
                 },
                 sede: {
                     select: {
+                        idsede: true,
                         nombre: true,
                         direccion: true
                     }
@@ -279,7 +303,8 @@ exports.getDetailsById = async (req, res) => {
                     select: {
                         idpedido: true,
                         fechaentrega: true,
-                        observaciones: true
+                        observaciones: true,
+                        mensajePersonalizado: true  // ✅ AÑADIR ESTO
                     }
                 }
             }
@@ -306,6 +331,7 @@ exports.getDetailsById = async (req, res) => {
             }
         }));
 
+        // ✅ TRANSFORMAR CORRECTAMENTE INCLUYENDO EL CAMPO 'cliente'
         const ventaTransformada = {
             idventa: venta.idventa,
             fechaventa: venta.fechaventa,
@@ -313,18 +339,20 @@ exports.getDetailsById = async (req, res) => {
             metodopago: venta.metodopago,
             tipoventa: venta.tipoventa,
             estadoVentaId: venta.estadoVentaId,
-            clienteData: venta.clienteData,
+            cliente: venta.cliente,  // ✅ CRÍTICO: Incluir el campo cliente (ID)
+            clienteData: venta.clienteData,  // Objeto completo del cliente
             sede: venta.sede,
             estadoVenta: venta.estadoVenta,
             detalleventa: detallesTransformados,
             pedidoInfo: venta.pedido && venta.pedido.length > 0 ? {
                 idpedido: venta.pedido[0].idpedido,
                 fechaentrega: venta.pedido[0].fechaentrega,
-                observaciones: venta.pedido[0].observaciones
+                observaciones: venta.pedido[0].observaciones,
+                mensajePersonalizado: venta.pedido[0].mensajePersonalizado
             } : null
         };
 
-        console.log(`✅ Detalle de venta ${id} encontrado`);
+        console.log(`✅ Detalle de venta ${id} encontrado - Cliente ID: ${venta.cliente}`);
         
         res.json(ventaTransformada);
 
