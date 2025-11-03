@@ -656,13 +656,38 @@ exports.update = async (req, res) => {
     console.log(`Actualizando venta ${id}:`, req.body);
 
     const ventaExiste = await prisma.venta.findUnique({
-      where: { idventa: id }
+      where: { idventa: id },
+      include: {
+        detalleventa: {
+          include: {
+            productogeneral: {
+              select: {
+                nombreproducto: true
+              }
+            }
+          }
+        },
+        pedido: {
+          select: {
+            idpedido: true,
+            fechaentrega: true
+          }
+        }
+      }
     });
 
     if (!ventaExiste) {
       return res.status(404).json({ message: 'Venta no encontrada' });
     }
 
+    // 🔥 DETECTAR CAMBIO DE ESTADO A "EN PRODUCCIÓN" (ID: 2)
+    const estadoAnterior = ventaExiste.estadoVentaId;
+    const estadoNuevo = req.body.estadoVentaId;
+    const esVentaPedido = ventaExiste.tipoventa === 'pedido';
+
+    console.log(`📊 Estado anterior: ${estadoAnterior}, Estado nuevo: ${estadoNuevo}, Tipo: ${ventaExiste.tipoventa}`);
+
+    // Actualizar la venta
     const updated = await prisma.venta.update({
       where: { idventa: id },
       data: req.body,
@@ -671,7 +696,66 @@ exports.update = async (req, res) => {
       }
     });
 
-    console.log(`Venta ${id} actualizada`);
+    console.log(`✅ Venta ${id} actualizada`);
+
+    // 🔥 SI ES PEDIDO Y CAMBIÓ A "EN PRODUCCIÓN", CREAR REGISTRO EN PRODUCCIÓN
+    if (esVentaPedido && estadoNuevo === 2 && estadoAnterior !== 2) {
+      console.log('🏭 Creando registro de producción automáticamente...');
+
+      try {
+        // Verificar si ya existe una producción para esta venta
+        const produccionExistente = await prisma.produccion.findFirst({
+          where: {
+            numeropedido: `V-${id}`
+          }
+        });
+
+        if (produccionExistente) {
+          console.log('⚠️ Ya existe una producción para este pedido:', produccionExistente.idproduccion);
+        } else {
+          // Crear la producción
+          const nuevaProduccion = await prisma.produccion.create({
+            data: {
+              TipoProduccion: 'pedido',
+              nombreproduccion: `Pedido Venta #${id}`,
+              fechapedido: new Date(),
+              fechaentrega: ventaExiste.pedido?.[0]?.fechaentrega || null,
+              numeropedido: `V-${id}`, // Relacionar con la venta
+              estadoproduccion: 1, // Pendiente
+              estadopedido: 1 // Abonado
+            }
+          });
+
+          console.log('✅ Producción creada con ID:', nuevaProduccion.idproduccion);
+
+          // Crear detalles de producción
+          const detallesProduccion = ventaExiste.detalleventa.map(detalle => ({
+            idproduccion: nuevaProduccion.idproduccion,
+            idproductogeneral: detalle.idproductogeneral,
+            cantidadproducto: parseFloat(detalle.cantidad || 1),
+            sede: null // Los pedidos no tienen sede específica hasta que se entregan
+          }));
+
+          await prisma.detalleproduccion.createMany({
+            data: detallesProduccion
+          });
+
+          console.log(`✅ ${detallesProduccion.length} detalles de producción creados`);
+
+          // Agregar info de producción a la respuesta
+          updated.produccionCreada = {
+            idproduccion: nuevaProduccion.idproduccion,
+            nombreproduccion: nuevaProduccion.nombreproduccion,
+            mensaje: 'Producción creada automáticamente'
+          };
+        }
+      } catch (errorProduccion) {
+        console.error('❌ Error al crear producción automática:', errorProduccion);
+        // No fallar la actualización de venta, solo registrar el error
+        updated.errorProduccion = 'No se pudo crear la producción automáticamente';
+      }
+    }
+
     res.json(updated);
 
   } catch (error) {
