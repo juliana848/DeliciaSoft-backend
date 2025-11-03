@@ -620,25 +620,52 @@ exports.remove = async (req, res) => {
   }
 };
 
-// Eliminar producción
+// Eliminar producción (CORREGIDO)
 exports.remove = async (req, res) => {
   try {
     const id = parseInt(req.params.id);
+    
+    console.log(`🗑️ DELETE /api/produccion/${id}`);
+
     const produccionExiste = await prisma.produccion.findUnique({ 
-      where: { idproduccion: id } 
+      where: { idproduccion: id },
+      include: {
+        detalleproduccion: true
+      }
     });
     
     if (!produccionExiste) {
       return res.status(404).json({ message: 'Producción no encontrada' });
     }
 
-    await prisma.produccion.delete({ where: { idproduccion: id } });
-    res.json({ message: 'Producción eliminada correctamente' });
+    console.log(`📦 Producción encontrada con ${produccionExiste.detalleproduccion.length} detalles`);
+
+    // Usar transacción para eliminar detalles primero
+    await prisma.$transaction(async (tx) => {
+      // 1. Eliminar todos los detalles de producción
+      const detallesEliminados = await tx.detalleproduccion.deleteMany({
+        where: { idproduccion: id }
+      });
+      console.log(`✅ Detalles eliminados: ${detallesEliminados.count}`);
+
+      // 2. Eliminar la producción
+      await tx.produccion.delete({ 
+        where: { idproduccion: id } 
+      });
+      console.log('✅ Producción eliminada');
+    });
+
+    res.json({ 
+      success: true,
+      message: 'Producción eliminada correctamente' 
+    });
+
   } catch (error) {
-    console.error('Error al eliminar producción:', error);
+    console.error('❌ Error al eliminar producción:', error);
     res.status(500).json({ 
       message: 'Error al eliminar producción', 
-      error: error.message 
+      error: error.message,
+      stack: error.stack // Para debug
     });
   }
 };
