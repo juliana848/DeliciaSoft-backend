@@ -1,4 +1,4 @@
-// auth.controller.js - VERSIÓN CORREGIDA CON VALIDACIONES ESTRICTAS
+// auth.controller.js - ENVÍA EMAILS NORMALES, CÓDIGO FIJO SOLO PARA TESTS
 
 const { PrismaClient } = require('@prisma/client');
 const jwt = require('jsonwebtoken');
@@ -7,12 +7,18 @@ const SibApiV3Sdk = require('sib-api-v3-sdk');
 const prisma = new PrismaClient();
 const verificationCodes = {}; // Memoria temporal
 
+// 🔥 CONFIGURACIÓN: Solo para correos de prueba específicos
+const TEST_EMAILS = (process.env.TEST_EMAILS || '').split(',').map(e => e.trim()).filter(Boolean);
+const TEST_CODE = process.env.TEST_VERIFICATION_CODE || '000000';
+
+console.log('🧪 Correos de prueba configurados:', TEST_EMAILS.length > 0 ? TEST_EMAILS : 'Ninguno');
+
 // Configuración Brevo
 let transactionalEmailsApi = null;
 
 function initializeBrevoClient() {
   try {
-    console.log('🔧 Inicializando cliente de Brevo...');
+    console.log('📧 Inicializando cliente de Brevo...');
     
     if (!process.env.BREVO_API_KEY || !process.env.EMAIL_USER) {
       console.error('❌ BREVO_API_KEY o EMAIL_USER no están configurados');
@@ -80,6 +86,13 @@ function generateJwtToken(correo, userType) {
     throw new Error('JWT_SECRET no configurado');
   }
   return jwt.sign({ correo, userType }, process.env.JWT_SECRET, { expiresIn: '5m' });
+}
+
+// 🔥 FUNCIÓN HELPER: Verifica si un correo es de prueba
+function isTestEmail(email) {
+  return TEST_EMAILS.some(testEmail => 
+    testEmail.toLowerCase() === email.toLowerCase()
+  );
 }
 
 function getVerificationEmailTemplate(code) {
@@ -210,12 +223,11 @@ module.exports = {
     }
   },
 
-  // 🔥 MÉTODO CRÍTICO CORREGIDO: Ahora valida usuario Y contraseña ANTES de enviar código
   async sendVerificationCode(req, res) {
     try {
       const { correo, userType, password } = req.body;
       
-      console.log('🔐 Validando credenciales para:', correo);
+      console.log('🔍 Validando credenciales para:', correo);
       
       if (!correo) {
         return res.status(400).json({ 
@@ -224,7 +236,6 @@ module.exports = {
         });
       }
 
-      // 🔥 NUEVO: Validar contraseña también si se proporciona
       if (!password) {
         return res.status(400).json({
           success: false,
@@ -240,13 +251,12 @@ module.exports = {
         });
       }
 
-      // 🔥 VALIDACIÓN CRÍTICA: Verificar que usuario existe Y contraseña es correcta
+      // Validar que usuario existe Y contraseña es correcta
       let detectedUserType = userType;
       let user = null;
       let passwordCorrect = false;
       
       try {
-        // Buscar en usuarios (admin)
         user = await prisma.usuarios.findFirst({ 
           where: { correo, estado: true } 
         });
@@ -264,7 +274,6 @@ module.exports = {
             });
           }
         } else {
-          // Buscar en clientes
           user = await prisma.cliente.findFirst({ 
             where: { correo, estado: true } 
           });
@@ -297,7 +306,6 @@ module.exports = {
         });
       }
 
-      // 🔥 Solo llegar aquí si usuario existe Y contraseña es correcta
       if (!passwordCorrect || !user) {
         return res.status(401).json({ 
           success: false,
@@ -305,18 +313,36 @@ module.exports = {
         });
       }
 
-      // Generar código solo después de validar credenciales
-      const code = Math.floor(100000 + Math.random() * 900000).toString();
+      // 🔥 GENERAR CÓDIGO: Fijo para correos de prueba, aleatorio para el resto
+      const esCorreoDePrueba = isTestEmail(correo);
+      const code = esCorreoDePrueba ? TEST_CODE : Math.floor(100000 + Math.random() * 900000).toString();
+      
       verificationCodes[correo] = { 
         code, 
         expiry: Date.now() + 600000, // 10 minutos
         userType: detectedUserType,
-        password: password // Guardar para validar después
+        password: password
       };
 
       console.log(`🔑 Código generado: ${code} para ${correo} (${detectedUserType})`);
+      if (esCorreoDePrueba) {
+        console.log('🧪 CORREO DE PRUEBA: Código fijo usado:', TEST_CODE);
+      }
 
-      // Intentar enviar email
+      // 🔥 SI ES CORREO DE PRUEBA, NO ENVIAR EMAIL
+      if (esCorreoDePrueba) {
+        console.log('🧪 Correo de prueba detectado: Saltando envío de email');
+        return res.json({
+          success: true,
+          message: 'Código generado (correo de prueba)',
+          codigo: code, // Devolver en la respuesta
+          userType: detectedUserType,
+          emailSent: false,
+          testMode: true
+        });
+      }
+
+      // 🔥 PARA CORREOS NORMALES: ENVIAR EMAIL SIEMPRE
       try {
         await sendBrevoEmail(
           correo, 
@@ -332,6 +358,7 @@ module.exports = {
           provider: 'Brevo'
         };
 
+        // Solo en desarrollo devolver el código
         if (process.env.NODE_ENV !== 'production') {
           response.codigo = code;
         }
@@ -341,6 +368,7 @@ module.exports = {
       } catch (emailError) {
         console.error('❌ Error enviando email:', emailError.message);
         
+        // Fallback solo en desarrollo
         if (process.env.NODE_ENV !== 'production') {
           res.json({ 
             success: true,
@@ -367,7 +395,6 @@ module.exports = {
     }
   },
 
-  // 🔥 MÉTODO CRÍTICO CORREGIDO: Validación más estricta del código
   async verifyCodeAndLogin(req, res) {
     try {
       const { correo, codigo, password } = req.body;
@@ -382,7 +409,6 @@ module.exports = {
         });
       }
 
-      // Validar código almacenado
       const stored = verificationCodes[correo];
       console.log('💾 Código almacenado:', stored ? stored.code : 'No encontrado');
       
@@ -394,7 +420,6 @@ module.exports = {
         });
       }
 
-      // 🔥 VALIDACIÓN ESTRICTA: Código debe coincidir exactamente
       if (stored.code !== codigo) {
         console.error('❌ Código incorrecto:', codigo, 'vs', stored.code);
         return res.status(400).json({ 
@@ -403,7 +428,6 @@ module.exports = {
         });
       }
 
-      // Verificar expiración
       if (Date.now() > stored.expiry) {
         console.error('❌ Código expirado');
         delete verificationCodes[correo];
@@ -413,7 +437,6 @@ module.exports = {
         });
       }
 
-      // 🔥 VALIDACIÓN ADICIONAL: Verificar que la contraseña siga siendo correcta
       if (stored.password !== password) {
         console.error('❌ Contraseña no coincide con la original');
         delete verificationCodes[correo];
@@ -423,11 +446,9 @@ module.exports = {
         });
       }
 
-      // Código válido - eliminar de memoria
       delete verificationCodes[correo];
       console.log('✅ Código válido y eliminado');
 
-      // Buscar usuario final
       let user = null;
       let actualUserType = '';
 
@@ -534,7 +555,10 @@ module.exports = {
         });
       }
 
-      const code = Math.floor(100000 + Math.random() * 900000).toString();
+      // 🔥 Código fijo para correos de prueba, aleatorio para el resto
+      const esCorreoDePrueba = isTestEmail(correo);
+      const code = esCorreoDePrueba ? TEST_CODE : Math.floor(100000 + Math.random() * 900000).toString();
+      
       verificationCodes[correo] = { 
         code, 
         expiry: Date.now() + 600000,
@@ -544,6 +568,19 @@ module.exports = {
 
       console.log(`🔑 Código de recuperación generado para ${correo}: ${code}`);
 
+      // 🔥 SI ES CORREO DE PRUEBA, NO ENVIAR EMAIL
+      if (esCorreoDePrueba) {
+        console.log('🧪 Correo de prueba: Saltando envío de email de recuperación');
+        return res.json({
+          success: true,
+          message: 'Código de recuperación generado (correo de prueba)',
+          codigo: code,
+          emailSent: false,
+          testMode: true
+        });
+      }
+
+      // 🔥 PARA CORREOS NORMALES: ENVIAR EMAIL SIEMPRE
       try {
         await sendBrevoEmail(
           correo, 
@@ -551,26 +588,21 @@ module.exports = {
           getVerificationEmailTemplate(code)
         );
         
-        // 🔥 SIEMPRE devolver el código (desarrollo Y producción)
-        const response = {
+        res.json({
           success: true,
           message: 'Código de recuperación enviado',
-          codigo: code, // 🔥 CAMBIO: Siempre incluir
+          codigo: process.env.NODE_ENV !== 'production' ? code : undefined,
           provider: 'Brevo',
           emailSent: true
-        };
-
-        console.log('✅ Código enviado, devolviendo:', response);
-        res.json(response);
+        });
         
       } catch (emailError) {
         console.error('❌ Error enviando email reset:', emailError);
         
-        // Fallback: devolver código aunque no se envíe email
         res.json({ 
           success: true,
           message: 'Código generado (email no enviado)',
-          codigo: code, // 🔥 Siempre incluir
+          codigo: code,
           emailSent: false,
           provider: 'Fallback'
         });
